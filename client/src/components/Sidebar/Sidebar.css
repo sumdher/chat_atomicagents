@@ -32,102 +32,192 @@
   color: var(--text-primary);
 }
 
-@media (min-width: 840px) {
-  .sidebar {
-    display: block;
-  }
+/* Session Management Styles */
+.session-management {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid #444;
 }
 
+.session-management h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+}
+
+.session-management h4::before {
+  content: "💬";
+  margin-right: 0.5rem;
+}
+
+.session-list {
+  max-height: 150px;
+  overflow-y: auto;
+  margin: 0.5rem 0;
+}
+
+.session-item {
+  padding: 8px 12px;
+  margin: 5px 0;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  background-color: rgba(255, 147, 51, 0.1);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.session-item:hover {
+  background-color: rgba(255, 147, 51, 0.2);
+}
+
+.session-item.active {
+  background-color: rgba(255, 147, 51, 0.3);
+  font-weight: 500;
+}
+
+.active-indicator {
+  color: var(--primary-color);
+  font-weight: bold;
+}
+
+.new-session-btn {
+  width: 100%;
+  padding: 6px 12px;
+  margin-top: 10px;
+  background: var(--primary-color);
+  color: black;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 700;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.new-session-btn:hover {
+  background: #ff9333;
+}
+
+/* File Upload Box */
 .file-upload-box {
-    margin-top: auto;
-    padding: 1rem;
-    border-top: 1px solid #ff9333;
-    background-color: var(--surface-dark);
+  margin-top: auto;
+  padding: 1rem 0;
+  background-color: var(--surface-dark);
+}
+
+.file-upload-box h4 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1rem;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+}
+
+.file-upload-box h4::before {
+  content: "📁";
+  margin-right: 0.5rem;
 }
 
 .file-list {
-    margin: 0.5rem 0;
-    max-height: 150px;
-    overflow-y: auto;
+  margin: 0.5rem 0;
+  max-height: 150px;
+  overflow-y: auto;
 }
 
 .file-entry {
-    display: flex;
-    align-items: center;
-    margin-bottom: 5px;
+  display: flex;
+  align-items: center;
+  margin-bottom: 5px;
 }
 
 .file-name {
-    margin-left: 0.5rem;
-    font-size: 0.9rem;
+  margin-left: 0.5rem;
+  font-size: 0.9rem;
+  flex-grow: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .file-button,
 .load-button {
-    background-color: var(--primary-color);
-    color: black;
-    padding: 6px 12px;
-    font-size: 14px;
-    font-family: inherit;
-    font-weight: 700;
-    height: 36px;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    white-space: nowrap;
-    text-align: center;
-    vertical-align: middle;
+  background-color: var(--primary-color);
+  color: black;
+  padding: 6px 12px;
+  font-size: 14px;
+  font-family: inherit;
+  font-weight: 700;
+  height: 36px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  text-align: center;
+  vertical-align: middle;
 }
 
 .file-button{ padding: 0px 12px; }
 
 .file-button:hover,
 .load-button:hover {
-    background-color: #ff9333;
+  background-color: #ff9333;
 }
 
 .load-button:disabled,
 .load-button[disabled] {
-    cursor: not-allowed;
-    opacity: 0.6;
-    background-color: #ff9333;
+  cursor: not-allowed;
+  opacity: 0.6;
+  background-color: #ff9333;
 }
 
 .load-button:disabled:hover,
 .load-button[disabled]:hover {
-    background-color: #ff9333;
+  background-color: #ff9333;
 }
 
 
 .button-row {
-    display: flex;
-    gap: 1rem;
-    margin-top: 1rem;
+  display: flex;
+  gap: 1rem;
+  margin-top: 1rem;
 }
 
 .delete-btn {
-    background: none;
-    border: none;
-    font-size: 0.9rem;
-    color: red;
-    margin-left: auto;
-    cursor: pointer;
+  background: none;
+  border: none;
+  font-size: 0.9rem;
+  color: #ff4d4d;
+  margin-left: auto;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 
 .spinner {
-    width: 16px;
-    height: 16px;
-    border: 2px solid rgba(255, 255, 255, 0.6);
-    border-top: 2px solid black;
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
-    margin-right: 8px;
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(255, 255, 255, 0.6);
+  border-top: 2px solid black;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+  margin-right: 8px;
 }
 
 @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@media (min-width: 840px) {
+  .sidebar {
+    display: block;
+  }
 }

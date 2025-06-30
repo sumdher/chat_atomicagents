@@ -40,3 +40,70 @@
 .read-the-docs {
   color: #888;
 }
+
+/* Add to your existing CSS */
+.app-container {
+  display: flex;
+  height: 100vh;
+}
+
+.main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--surface);
+  color: var(--text-primary);
+}
+
+.connect-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 20px;
+}
+
+.provider-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 300px;
+}
+
+.provider-selection label {
+  font-weight: bold;
+  color: var(--text-primary);
+}
+
+.provider-selection select {
+  padding: 10px;
+  border-radius: 6px;
+  border: 1px solid var(--primary-color);
+  background: var(--surface-dark);
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
+.connect-button {
+  padding: 12px 24px;
+  background-color: var(--primary-color);
+  color: black;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.connect-button:hover {
+  background-color: #ff9333;
+}
+
+.connect-button.connecting {
+  background-color: #ff9333;
+  cursor: not-allowed;
+}
+
+/* Rest of your existing CSS */
