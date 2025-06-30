@@ -170,14 +170,21 @@ export default function App() {
         activeSession.isTyping || 
         socketRef.current?.readyState !== 1) return;
     
+    const userMessage = { from: "user", text: activeSession.input };
+    
     setSessions(prev => prev.map(session => {
       if (session.id === activeSessionId) {
-        const newMessages = [...session.messages, { from: "user", text: activeSession.input }];
-        socketRef.current.send(activeSession.input);
-        return {...session, messages: newMessages, input: "", isTyping: true};
+        return {
+          ...session,
+          messages: [...session.messages, userMessage],
+          input: "",
+          isTyping: true
+        };
       }
       return session;
     }));
+    
+    socketRef.current.send(activeSession.input);
   };
 
   const setInput = (value) => {
