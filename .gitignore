@@ -41,3 +41,4 @@ __pycache__/
 server/__pycache__/
 server/chat/__pycache__/
 *.py[cod]
+atomic-agents
