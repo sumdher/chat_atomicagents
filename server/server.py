@@ -217,6 +217,7 @@ async def websocket_endpoint(websocket: WebSocket):
         
         # Send welcome message
         await websocket.send_text("Hello! How can I assist you today?")
+        await websocket.send_text("[[END]]") 
         print("Sent welcome message")
         
         # Step 3: Handle messages

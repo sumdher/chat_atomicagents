@@ -78,7 +78,7 @@ export default function Sidebar({
 
   return (
     <aside className="sidebar">
-      <h2 className="sidebar-title">🧠 Chat SkiBiDi</h2>
+      <h2 className="sidebar-title">Any Chat</h2>
 
       {/* Session Management */}
       <div className="session-management">
