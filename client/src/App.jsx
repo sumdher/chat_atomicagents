@@ -199,7 +199,6 @@ export default function App() {
     const currentProvider = activeSession.provider;
     const newSession = {
       ...createDefaultSession(),
-      title: `Chat ${sessions.length + 1}`,
       provider: currentProvider,
     };
 
