@@ -68,7 +68,7 @@ class Session:
                 model_api_parameters={"max_tokens": 2048}
             )
         )
-        print(f"✅ Agent initialized with provider: {provider}, model: {model}")
+        print(f"Agent initialized with provider: {provider}, model: {model}")
     
     def setup_client(self, provider):
         provider = provider.lower()
@@ -217,7 +217,7 @@ async def websocket_endpoint(websocket: WebSocket):
         if not session.agent:
             try:
                 session.initialize_agent(provider)
-                print(f"✅ Initialized agent for session {session_id} with provider {provider}")
+                print(f"Initialized agent for session {session_id} with provider {provider}")
             except Exception as e:
                 error_msg = f"Agent initialization failed: {str(e)}"
                 print(error_msg)

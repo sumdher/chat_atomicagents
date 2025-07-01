@@ -1,16 +1,17 @@
 /* Header.css */
 .header {
-  background-color: var(--background-kinda-dark);
-  padding: 1rem;
-  border-bottom: 1px solid #444;
+  padding: 1.3rem;
+  border-bottom: 1px solid var(--background-kinda-dark);
   flex-shrink: 0;
   position: sticky;
   top: 0;
-  z-index: 10;
+  z-index: 100;
+  backdrop-filter: blur(13px);
+  /* background-color: var(--surface-dark); */
 }
 
 .header-title {
-  color: var(--primary-color);
+  color: var(--accent-light);
   font-weight: bold;
   font-size: 1.55rem;
   margin: 0;

@@ -5,14 +5,16 @@
   padding: 1.5rem;
   display: none;
   overflow-y: auto;
+  border-right: 1px solid var(--background-kinda-dark);
+  
 }
 
 .sidebar-title {
   margin: 0;
-  padding: 1rem 0 3rem 0;
+  padding: 0rem 0 3rem 0;
   font-size: 1.7rem;
   font-weight: bold;
-  color: var(--primary-color);
+  color: var(--accent);
   display: flex;
   align-items: center;
 }
@@ -32,30 +34,32 @@
   color: var(--text-primary);
 }
 
-/* Session Management Styles */
 .session-management {
-  margin-bottom: 1.5rem;
-  padding-bottom: 1.5rem;
-  border-bottom: 1px solid #444;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
-.session-management h4 {
-  margin: 0 0 0.5rem 0;
+.session-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.session-header h4 {
+  margin: 0;
   font-size: 1rem;
   color: var(--text-primary);
-  display: flex;
-  align-items: center;
-}
-
-.session-management h4::before {
-  content: "💬";
-  margin-right: 0.5rem;
 }
 
 .session-list {
-  max-height: 150px;
+  flex: 1;
   overflow-y: auto;
   margin: 0.5rem 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--primary-color) transparent;
 }
 
 .session-item {
@@ -65,17 +69,17 @@
   cursor: pointer;
   display: flex;
   justify-content: space-between;
-  background-color: rgba(255, 147, 51, 0.1);
+  background-color: var(--background-kinda-dark);
   color: var(--text-primary);
   font-size: 0.9rem;
 }
 
 .session-item:hover {
-  background-color: rgba(255, 147, 51, 0.2);
+  background-color: rgba(147, 147, 147, 0.2);
 }
 
 .session-item.active {
-  background-color: rgba(255, 147, 51, 0.3);
+  background-color: rgba(255, 255, 255, 0.3);
   font-weight: 500;
 }
 
@@ -85,7 +89,7 @@
 }
 
 .new-session-btn {
-  width: 100%;
+  width: 50%;
   padding: 6px 12px;
   margin-top: 10px;
   background: var(--primary-color);
@@ -98,10 +102,11 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  transition: background 0.2s ease;
 }
 
 .new-session-btn:hover {
-  background: #ff9333;
+  background: var(--highlight-color);
 }
 
 /* File Upload Box */
@@ -169,7 +174,7 @@
 
 .file-button:hover,
 .load-button:hover {
-  background-color: #ff9333;
+  background-color: var(--highlight-color);
 }
 
 .load-button:disabled,
@@ -181,7 +186,7 @@
 
 .load-button:disabled:hover,
 .load-button[disabled]:hover {
-  background-color: #ff9333;
+  background-color: var(--highlight-color);
 }
 
 

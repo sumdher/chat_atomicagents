@@ -78,37 +78,41 @@ export default function Sidebar({
 
   return (
     <aside className="sidebar">
-      <h2 className="sidebar-title">Any Chat</h2>
+    <h2 className="sidebar-title">Any Chat</h2>
 
-      {/* Session Management */}
-      <div className="session-management">
+    <div className="session-management">
+      <div className="session-header">
         <h4>Sessions</h4>
-        <div className="session-list">
-          {sessions.map(session => (
-            <div 
-              key={session.id}
-              className={`session-item ${session.id === activeSessionId ? 'active' : ''}`}
-              onClick={() => setActiveSessionId(session.id)}
-            >
-              {session.title}
-              {session.id === activeSessionId && <span className="active-indicator">●</span>}
-            </div>
-          ))}
-          <button className="new-session-btn" onClick={createNewSession}>
-            + New Session
-          </button>
-        </div>
+        <button className="new-session-btn" onClick={createNewSession}>
+          + New Session
+        </button>
       </div>
+      <div className="session-list">
+        {sessions.map(session => (
+          <div 
+            key={session.id}
+            className={`session-item ${session.id === activeSessionId ? 'active' : ''}`}
+            onClick={() => setActiveSessionId(session.id)}
+          >
+            {session.title}
+            {session.id === activeSessionId && <span className="active-indicator">●</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  </aside>
+  );
+}
 
+
+{/*
       <div className="file-upload-box">
         <h4>Files</h4>
-
         <div className="file-list">
           {uploadedFiles.map((file, idx) => {
             const key = Object.keys(fileMap).find(k => fileMap[k] === file.name);
             const isLoaded = key && loadedKeys.has(key);
 
-            return (
               <div key={idx} className="file-entry" style={{ opacity: isLoaded ? 0.5 : 1 }}>
                 <span role="img" aria-label="file">📄</span>
                 <div className="file-name" title={file.name}>
@@ -123,7 +127,6 @@ export default function Sidebar({
                   >✖</button>
                 )}
               </div>
-            );
           })}
         </div>
 
@@ -142,8 +145,8 @@ export default function Sidebar({
           <button
             className="load-button"
             disabled={
-              isLoadingContext || 
-              uploadedFiles.length === 0 || 
+              isLoadingContext ||
+              uploadedFiles.length === 0 ||
               uploadedFiles.every(file => {
                 const key = Object.keys(fileMap).find(k => fileMap[k] === file.name);
                 return key && loadedKeys.has(key);
@@ -158,9 +161,6 @@ export default function Sidebar({
             ) : (
               "Load to Context"
             )}
-          </button>
-        </div>
-      </div>
-    </aside>
-  );
-}
+          </button> */}
+        {/* </div> */}
+      {/* </div> */}

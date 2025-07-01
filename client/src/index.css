@@ -1,9 +1,24 @@
-/* Loading state for connect button */
-.connect-button.connecting {
-  background-color: #ff9333;
-  cursor: not-allowed;
-  opacity: 0.5;
+/* index.css */
+
+/* Global Variables */
+:root {
+  --accent: #f7dab2;
+  --accent-light: #f8e4c8;
+  
+  --primary-color: #d0d0d0;
+
+  --background-dark: #121212;
+  --background-kinda-dark: #242424;     /* Slightly lighter for contrast layers */
+  --surface-dark: #181818;              /* Used for cards, modals, etc. */
+  
+  --text-primary: #ebebeb;              /* Pure white for strong contrast */
+  --text-secondary: #a0a0a0;            /* Muted grey for less important text */
+  
+  --border-color: #2a2a2a;              /* Optional: subtle border color */
+  
+  --highlight-color: #ffffff;           /* Optional: for hover or subtle highlights */
 }
+
 .connect-screen {
   flex: 1;
   display: flex;
@@ -11,33 +26,6 @@
   align-items: center;
 }
 
-.connect-button {
-  background-color: var(--primary-color);
-  color: black;
-  font-weight: bold;
-  padding: 1rem 2rem;
-  font-size: 1.25rem;
-  border: none;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.3s ease;
-}
-
-.connect-button:hover {
-  background-color: #ffa13b;
-}
-
-/* index.css */
-
-/* Global Variables */
-:root {
-  --primary-color: #ff7b00;
-  --background-dark: #1a1a1a;
-  --background-kinda-dark: #242323;
-  --surface-dark: #111;
-  --text-primary: white;
-  --text-secondary: #bbb;
-}
 
 /* Global base styles */
 body {

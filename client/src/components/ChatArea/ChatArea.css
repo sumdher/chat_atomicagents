@@ -47,9 +47,9 @@
 }
 
 .message-bubble.user {
-  background-color: #393838;
+  background-color: #292929;
   border-radius: 25px;
-  padding: 0.7rem 1.3rem;
+  padding: 0.6rem 1.7rem;
   color: var(--text-primary);
   line-height: 1.6;
   max-width: 700px;
@@ -94,7 +94,7 @@
 .message-bubble h2 strong,
 .message-bubble h3 strong {
   padding-bottom: 1rem;
-  color: #ffb347;
+  color: var(--accent);
 }
 
 .message-bubble ul {

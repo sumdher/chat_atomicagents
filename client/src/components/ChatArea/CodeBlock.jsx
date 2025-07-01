@@ -20,7 +20,6 @@ export default function CodeBlock({ language = "text", value = "" }) {
             border: "1px solid #30363d",
             background: "#0d1117"
         }}>
-            {/* Header */}
             <div style={{
                 display: "flex",
                 justifyContent: "space-between",
@@ -40,10 +39,13 @@ export default function CodeBlock({ language = "text", value = "" }) {
                         background: "transparent",
                         color: "#d9d9d9",
                         border: "none",
-                        fontSize: "0.8rem",
+                        fontSize: "1rem",
                         cursor: "pointer",
                         padding: "2px 6px",
+                        // transition: "background 0.2s ease",
                     }}
+                    onMouseEnter={e => e.currentTarget.style.color = "#ffffff"}
+                    onMouseLeave={e => e.currentTarget.style.color = copied ? "#ffffff" : "#d9d9d9"}                
                 >
                     {copied ? "Copied!" : "Copy"}
                 </button>

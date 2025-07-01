@@ -4,7 +4,8 @@ import Sidebar from "./components/Sidebar/Sidebar";
 import Header from "./components/Header/Header";
 import ChatArea from "./components/ChatArea/ChatArea";
 import InputArea from "./components/InputArea/InputArea";
-import './index.css';
+import './App.css';
+// import './index.css'
 
 export default function App() {
   const [sessions, setSessions] = useState([
@@ -225,10 +226,10 @@ export default function App() {
               >
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Anthropic</option>
-                <option value="groq">Groq</option>
-                <option value="ollama">Ollama</option>
+                {/* <option value="groq">Groq</option> */}
+                {/* <option value="ollama">Ollama</option> */}
                 <option value="gemini">Gemini</option>
-                <option value="openrouter">OpenRouter</option>
+                {/* <option value="openrouter">OpenRouter</option> */}
               </select>
             </div>
             
