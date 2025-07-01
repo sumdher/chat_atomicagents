@@ -60,12 +60,15 @@
   margin: 0.5rem 0;
   scrollbar-width: thin;
   scrollbar-color: var(--primary-color) transparent;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
 }
 
 .session-item {
   padding: 8px 12px;
   margin: 5px 0;
-  border-radius: 6px;
+  border-radius: 4px;
+  margin-bottom: 4px;
   cursor: pointer;
   display: flex;
   justify-content: space-between;

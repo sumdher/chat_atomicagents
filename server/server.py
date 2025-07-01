@@ -1,4 +1,6 @@
 import os
+import subprocess
+import sys
 import uuid
 import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException
@@ -12,8 +14,86 @@ import time
 import json
 import dotenv
 import traceback
+import asyncpg
+from datetime import datetime
+from contextlib import asynccontextmanager
 
-app = FastAPI()
+dotenv.load_dotenv()
+
+DATABASE_URL=os.getenv("DATABASE_URL")
+DB_CONTAINER_NAME = "chat-app-db"
+
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL environment variable not set")
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "chat_db")
+
+# os.makedirs(os.path.join(DATA_DIR, "postgres-data"), exist_ok=True)
+os.makedirs(os.path.join(DATA_DIR, "user_files"), exist_ok=True)
+
+def start_database():
+    """Start the PostgreSQL Docker container if not running"""
+    try:
+        # Check if Docker is installed
+        subprocess.run(["docker", "--version"], check=True, 
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        
+        script_path = os.path.join(DATA_DIR, "docker-db.sh")
+        if os.path.exists(script_path):
+            subprocess.run(["bash", script_path], check=True)
+            print("✅ PostgreSQL container started successfully")
+        else:
+            print(f"⚠️ docker-db.sh script not found at {script_path}. Using existing DB connection.")
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"❌ Docker error: {str(e)}. Using existing database connection.")
+
+async def stop_database():
+    """Stop the PostgreSQL Docker container if running"""
+    try:
+        # Check if container exists and is running
+        process = await asyncio.create_subprocess_exec(
+            "docker", "stop", DB_CONTAINER_NAME,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE
+        )
+        stdout, stderr = await process.communicate()
+        if process.returncode == 0:
+            print(f"✅ Stopped container {DB_CONTAINER_NAME}")
+        else:
+            error_msg = stderr.decode().strip()
+            if "No such container" in error_msg:
+                print(f"⚠️ Container {DB_CONTAINER_NAME} not found")
+            else:
+                print(f"⚠️ Could not stop container: {error_msg}")
+    except FileNotFoundError:
+        print("❌ Docker not installed, skipping container stop")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    start_database()
+    await asyncio.sleep(2)
+    
+    # Create database connection pool
+    app.state.db_pool = await asyncpg.create_pool(
+        DATABASE_URL, 
+        min_size=5, 
+        max_size=20,
+        command_timeout=60
+    )
+    
+    # Initialize database tables
+    await init_db(app.state.db_pool)
+    print("✅ Database connected and initialized")
+    
+    yield
+    
+    # Shutdown
+    await app.state.db_pool.close()
+    print("❌ Database connection closed")
+    await stop_database()
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -22,10 +102,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-dotenv.load_dotenv()
-
 sessions: Dict[str, 'Session'] = {}
-UPLOAD_DIR = "user_files"
+UPLOAD_DIR = os.path.join(DATA_DIR, "user_files")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 file_map: Dict[str, str] = {}  # {file_key: original_name}
 
@@ -35,11 +113,31 @@ class Session:
         self.agent = None
         self.loaded_files: Set[str] = set()
         self.active_generation = None
-        
-    def initialize_agent(self, provider: str):
-        """Initialize agent after provider is known"""
-        client, model = self.setup_client(provider)
+        self.provider = None
+        self.model = None
         self.memory = AgentMemory()
+        
+    async def initialize_agent(self, provider: str):
+        """Initialize agent after provider is known"""
+        
+        if self.agent and self.provider == provider:
+            return  
+        
+        self.provider = provider
+        client, model = self.setup_client(provider)
+        self.model = model
+        
+        # Create or update session in database
+        async with app.state.db_pool.acquire() as conn:
+            await conn.execute('''
+                INSERT INTO chat_sessions (id, provider, model, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5)
+                ON CONFLICT (id) DO UPDATE
+                SET updated_at = EXCLUDED.updated_at
+            ''', self.session_id, provider, model, datetime.utcnow(), datetime.utcnow())
+        
+        # Load chat history from database
+        await self.load_history()
         
         system_prompt_geospatial = SystemPromptGenerator(
             background=[
@@ -55,20 +153,52 @@ class Session:
             ],
         )
 
-        initial_message = "Hello! How can I assist you today?"
-        initial_schema = BaseAgentOutputSchema(chat_message=initial_message)
-        self.memory.add_message("assistant", content=initial_schema)
+        # Add initial message if no history exists
+        if self.memory.get_message_count() == 0:
+            initial_message = "Hello! How can I assist you today?"
+            initial_schema = BaseAgentOutputSchema(chat_message=initial_message)
+            self.memory.add_message("assistant", content=initial_schema)
+            await self.save_message("assistant", initial_message)
         
         self.agent = BaseAgent(
             config=BaseAgentConfig(
                 client=client,
                 model=model,
                 memory=self.memory,
-                system_prompt_generator=system_prompt_geospatial,
-                model_api_parameters={"max_tokens": 2048}
+                # system_prompt_generator=system_prompt_geospatial,
+                model_api_parameters={"max_tokens": 2048},
             )
         )
         print(f"Agent initialized with provider: {provider}, model: {model}")
+    
+    async def load_history(self):
+        """Load chat history from database"""
+        async with app.state.db_pool.acquire() as conn:
+            rows = await conn.fetch('''
+                SELECT role, content 
+                FROM chat_messages 
+                WHERE session_id = $1 
+                ORDER BY created_at
+            ''', self.session_id)
+            
+            for row in rows:
+                content = row['content']
+                if row['role'] == "user":
+                    input_schema = BaseAgentInputSchema(chat_message=content)
+                    self.memory.add_message("user", content=input_schema)
+                elif row['role'] == "assistant":
+                    output_schema = BaseAgentOutputSchema(chat_message=content)
+                    self.memory.add_message("assistant", content=output_schema)
+        
+        print(f"Loaded {len(rows)} messages for session {self.session_id}")
+    
+    async def save_message(self, role: str, content: str):
+        """Save message to database"""
+        async with app.state.db_pool.acquire() as conn:
+            await conn.execute('''
+                INSERT INTO chat_messages (session_id, role, content, created_at)
+                VALUES ($1, $2, $3, $4)
+            ''', self.session_id, role, content, datetime.utcnow())
     
     def setup_client(self, provider):
         provider = provider.lower()
@@ -152,8 +282,7 @@ class Session:
         if not self.agent:
             yield "[ERROR] Agent not initialized. Please reconnect."
             return
-            
-        print(f"Processing input: '{input_text}'")
+
         input_schema = BaseAgentInputSchema(chat_message=input_text)
         # self.memory.add_message("user", content=input_schema)
         
@@ -172,7 +301,8 @@ class Session:
 
             if full_response:
                 output_schema = BaseAgentOutputSchema(chat_message=full_response)
-                self.memory.add_message("assistant", {"chat_message": output_schema})
+                self.memory.add_message("assistant", content=output_schema)
+                await self.save_message("assistant", full_response)
                 
         except Exception as e:
             traceback.print_exc()
@@ -182,7 +312,6 @@ class Session:
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     print("WebSocket connection established")
-    
     try:
         # Step 1: Get provider selection from client
         provider_data = await websocket.receive_text()
@@ -214,9 +343,9 @@ async def websocket_endpoint(websocket: WebSocket):
         session = sessions[session_id]
 
         # Initialize agent if not already done
-        if not session.agent:
+        if not session.agent or session.provider != provider:
             try:
-                session.initialize_agent(provider)
+                await session.initialize_agent(provider)
                 print(f"Initialized agent for session {session_id} with provider {provider}")
             except Exception as e:
                 error_msg = f"Agent initialization failed: {str(e)}"
@@ -226,48 +355,22 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.close(code=1011)
                 return
         
-        await websocket.send_text("Hello! How can I assist you today?")
-        await websocket.send_text("[[END]]") 
-        print("Sent welcome message")
+        # Send initial message if it exists
+        if session.memory.get_message_count() > 0 and session.memory.history[-1].role == "assistant":
+            last_message = session.memory.history[-1].content.chat_message
+            await websocket.send_text(last_message)
+            await websocket.send_text("[[END]]") 
         
         # Step 3: Handle messages
         while True:
             data = await websocket.receive_text()
-            print(f"Received message: '{data}'")
             
             if data == "__STOP__":
                 print("Received STOP command")
-                # session.cancel_generation()
                 await websocket.send_text("[[END]]")
                 continue
                 
-            elif data == "__CONTEXT__":
-                print("Loading files to context")
-                # Load files to context
-                new_files = []
-                for file_key, filename in file_map.items():
-                    if file_key not in session.loaded_files:
-                        file_path = os.path.join(UPLOAD_DIR, file_key)
-                        try:
-                            async with aiofiles.open(file_path, "r", encoding="utf-8", errors="ignore") as f:
-                                content = await f.read()
-                                # Add as system message
-                                session.agent.memory.add_message(
-                                    "system", 
-                                    {"chat_message": f"File: {filename}\nContent:\n{content}"}
-                                )
-                                session.loaded_files.add(file_key)
-                                new_files.append(filename)
-                        except Exception as e:
-                            error_msg = f"Error reading file {file_key}: {e}"
-                            print(error_msg)
-                            await websocket.send_text(f"[ERROR] {error_msg}")
-                
-                if new_files:
-                    await websocket.send_text(f"[[LOADED::{','.join(new_files)}]]")
-                await websocket.send_text("[[END]]")
-                print("Finished loading context")
-                continue
+            await session.save_message("user", data)
             
             # Normal message processing
             session.active_generation = asyncio.create_task(
@@ -299,42 +402,58 @@ async def stream_to_websocket(session: Session, websocket: WebSocket, input_text
     finally:
         await websocket.send_text("[[END]]")
 
-@app.post("/upload")
-async def upload_files(files: List[UploadFile] = File(...)):
-    saved_files = []
-    key_map = {}
-    for file in files:
-        key = f"{int(time.time() * 1000)}_{file.filename}"
-        file_path = os.path.join(UPLOAD_DIR, key)
-        
-        async with aiofiles.open(file_path, "wb") as f:
-            content = await file.read()
-            await f.write(content)
-        
-        file_map[key] = file.filename
-        key_map[key] = file.filename
-        saved_files.append(file.filename)
-    
-    return {"status": "success", "uploaded": saved_files, "file_map": key_map}
+async def init_db(pool):
+    try:
+        async with pool.acquire() as conn:
+            # Create tables if they don't exist
+            await conn.execute('''
+                CREATE TABLE IF NOT EXISTS chat_sessions (
+                    id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL DEFAULT 'New Chat',
+                    provider TEXT NOT NULL,
+                    model TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL
+                )
+            ''')
+            
+            await conn.execute('''
+                CREATE TABLE IF NOT EXISTS chat_messages (
+                    id SERIAL PRIMARY KEY,
+                    session_id TEXT NOT NULL REFERENCES chat_sessions(id) ON DELETE CASCADE,
+                    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+                    content TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL
+                )
+            ''')
+            
+            await conn.execute('''
+                CREATE INDEX IF NOT EXISTS idx_chat_messages_session 
+                ON chat_messages(session_id)
+            ''')
+            print("✅ Database tables verified")
+    except Exception as e:
+        print(f"❌ Database initialization failed: {str(e)}")
+        traceback.print_exc()
 
-@app.post("/delete-file")
-async def delete_file(file_key: str = Form(...)):
-    if file_key not in file_map:
-        raise HTTPException(status_code=404, detail="File not found")
-    
-    file_path = os.path.join(UPLOAD_DIR, file_key)
-    if os.path.exists(file_path):
-        os.remove(file_path)
-    
-    del file_map[file_key]
-    
-    # Remove from all sessions that loaded this file
-    for session in sessions.values():
-        if file_key in session.loaded_files:
-            session.loaded_files.remove(file_key)
-    
-    return {"status": "deleted"}
+
+# ... previous code ...
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=4580, ws="websockets")
+    
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    reload_dirs = ["."]
+    
+    chat_db_relative = os.path.relpath(DATA_DIR, current_dir)
+    reload_excludes = [os.path.join(chat_db_relative, '*')]
+    
+    uvicorn.run(
+        "server:app",
+        host="0.0.0.0",
+        port=4580,
+        ws="websockets",
+        reload=True,
+        reload_dirs=reload_dirs,
+        reload_excludes=reload_excludes
+    )
