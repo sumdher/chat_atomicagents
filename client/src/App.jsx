@@ -5,7 +5,6 @@ import Header from "./components/Header/Header";
 import ChatArea from "./components/ChatArea/ChatArea";
 import InputArea from "./components/InputArea/InputArea";
 import './App.css';
-// import './index.css'
 
 function createDefaultSession() {
   return {
@@ -23,12 +22,12 @@ function createDefaultSession() {
 }
 
 export default function App() {
-  const [isInitialized, setIsInitialized] = useState(false); // New state for initialization
-  const [sessions, setSessions] = useState([]); // Start with empty array
-  const [activeSessionId, setActiveSessionId] = useState(null); // Start with null
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [sessions, setSessions] = useState([]);
+  const [activeSessionId, setActiveSessionId] = useState(null);
   const socketRef = useRef(null);
 
-  // Initialize from localStorage
+  // Initialize sessions from localStorage
   useEffect(() => {
     const savedSessions = localStorage.getItem('chat_sessions');
     const savedActiveId = localStorage.getItem('active_session_id');
@@ -61,10 +60,10 @@ export default function App() {
 
     setSessions(initialSessions);
     setActiveSessionId(initialActiveId);
-    setIsInitialized(true); 
+    setIsInitialized(true);
   }, []);
 
-  // Save to localStorage whenever sessions change
+  // Save sessions & activeSessionId to localStorage on change
   useEffect(() => {
     if (!isInitialized) return;
 
@@ -80,7 +79,7 @@ export default function App() {
     localStorage.setItem('active_session_id', activeSessionId);
   }, [sessions, activeSessionId, isInitialized]);
 
-  // Update session title based on first message
+  // Update session title from first user message
   useEffect(() => {
     setSessions(prev => prev.map(session => {
       if (session.id === activeSessionId && session.messages.length > 0) {
@@ -96,160 +95,180 @@ export default function App() {
     }));
   }, [sessions.find(s => s.id === activeSessionId)?.messages]);
 
-  if (!isInitialized) {
-    return <div className="app-loading">Loading chats...</div>;
-  }
+  // Open one persistent WebSocket on app mount
+  useEffect(() => {
+    const socket = new WebSocket("ws://127.0.0.1:4580/ws/chat");
+    socketRef.current = socket;
+
+    socket.onopen = () => {
+      console.log("✅ WebSocket connected");
+      // Initialize currently active session on connect
+      if (activeSessionId) {
+        const activeSession = sessions.find(s => s.id === activeSessionId);
+        if (activeSession) {
+          socket.send(JSON.stringify({
+            type: "init",
+            sessionId: activeSessionId,
+            provider: activeSession.provider,
+          }));
+          setSessions(prev => prev.map(session =>
+            session.id === activeSessionId
+              ? { ...session, isConnecting: true }
+              : session
+          ));
+        }
+      }
+    };
+
+    socket.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        const { sessionId, token } = data;
+        if (!sessionId) return;
+
+        setSessions(prev => prev.map(session => {
+          if (session.id !== sessionId) return session;
+
+          if (token === "[[END]]") {
+            return {
+              ...session,
+              isTyping: false,
+              isLoadingContext: false,
+              isConnected: true,
+              isConnecting: false,
+            };
+          }
+
+          if (token.startsWith("[[LOADED::")) {
+            const loadedList = token.replace("[[LOADED::", "").replace("]]", "").split(",");
+            const newLoadedKeys = new Set([...session.loadedKeys, ...loadedList]);
+            return { ...session, loadedKeys: newLoadedKeys, isLoadingContext: true };
+          }
+
+          if (token.startsWith("[ERROR]")) {
+            console.error(`Session ${sessionId} error:`, token);
+            return { ...session, isTyping: false, isConnected: false, isConnecting: false };
+          }
+
+          // Append or create bot message
+          const lastMsg = session.messages[session.messages.length - 1];
+          let newMessages = [...session.messages];
+          if (lastMsg?.from === "bot") {
+            newMessages[newMessages.length - 1] = { ...lastMsg, text: lastMsg.text + token };
+          } else {
+            newMessages.push({ from: "bot", text: token });
+          }
+
+          return {
+            ...session,
+            messages: newMessages,
+            isTyping: true,
+            isConnected: true,
+            isConnecting: false,
+          };
+        }));
+
+      } catch (e) {
+        console.error("Error parsing WS message", e);
+      }
+    };
+
+    socket.onclose = () => {
+      console.log("❌ WebSocket closed");
+      setSessions(prev => prev.map(session => ({
+        ...session,
+        isConnected: false,
+        isConnecting: false,
+        isTyping: false,
+      })));
+    };
+
+    socket.onerror = (error) => {
+      console.error("WebSocket error", error);
+    };
+
+    return () => {
+      socket.close();
+    };
+  }, []);
 
   const activeSession = sessions.find(session => session.id === activeSessionId) || sessions[0];
 
-  // Create new session
+  // Create new session and init on server
   const createNewSession = () => {
     const currentProvider = activeSession.provider;
     const newSession = {
       ...createDefaultSession(),
       title: `Chat ${sessions.length + 1}`,
-      provider: currentProvider
+      provider: currentProvider,
     };
 
     setSessions(prev => [...prev, newSession]);
     setActiveSessionId(newSession.id);
 
-    // Close existing connection if any
-    if (socketRef.current?.readyState === WebSocket.OPEN) {
-      socketRef.current.close();
-    }
+    // Send init message for new session when activeSessionId changes (handled by useEffect)
   };
 
   // Delete a session
   const deleteSession = (id) => {
-    if (sessions.length <= 1) return; // Don't delete the last session
+    if (sessions.length <= 1) return; // Prevent deleting last session
 
     setSessions(prev => prev.filter(session => session.id !== id));
 
-    // If deleting active session, switch to first available
     if (id === activeSessionId) {
       const newActive = sessions.find(s => s.id !== id);
       setActiveSessionId(newActive.id);
     }
   };
 
-  // Update session provider
+  // When user switches active session, send init for that session
+  const switchSession = (id) => {
+    setActiveSessionId(id);
+
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      const session = sessions.find(s => s.id === id);
+      if (session) {
+        socketRef.current.send(JSON.stringify({
+          type: "init",
+          sessionId: id,
+          provider: session.provider,
+        }));
+        setSessions(prev => prev.map(session =>
+          session.id === id
+            ? { ...session, isConnecting: true }
+            : session
+        ));
+      }
+    }
+  };
+
+  // Change provider of active session and re-init connection for that session
   const setSessionProvider = (provider) => {
     setSessions(prev => prev.map(session =>
       session.id === activeSessionId
         ? { ...session, provider }
         : session
     ));
-  };
 
-  // Connect to WebSocket
-  const connectToLLM = () => {
-    // Close existing connection if any
     if (socketRef.current?.readyState === WebSocket.OPEN) {
-      socketRef.current.close();
-    }
-
-    setSessions(prev => prev.map(session =>
-      session.id === activeSessionId
-        ? { ...session, isConnecting: true }
-        : session
-    ));
-
-    const socket = new WebSocket("ws://127.0.0.1:4580/ws/chat");
-    socketRef.current = socket;
-
-    socket.onmessage = (event) => {
-      const chunk = event.data;
-
-      if (chunk === "[[END]]") {
-        setSessions(prev => prev.map(session =>
-          session.id === activeSessionId
-            ? { ...session, isTyping: false, isLoadingContext: false }
-            : session
-        ));
-        return;
-      }
-
-      if (chunk.startsWith("[[LOADED::")) {
-        const loadedList = chunk.replace("[[LOADED::", "").replace("]]", "").split(",");
-        setSessions(prev => prev.map(session => {
-          if (session.id === activeSessionId) {
-            const newLoadedKeys = new Set([...session.loadedKeys, ...loadedList]);
-            return { ...session, loadedKeys: newLoadedKeys, isLoadingContext: true };
-          }
-          return session;
-        }));
-        return;
-      }
-
-      // Normal bot message logic
-      setSessions(prev => prev.map(session => {
-        if (session.id === activeSessionId) {
-          const last = session.messages[session.messages.length - 1];
-          let newMessages = [...session.messages];
-
-          if (last?.from === "bot") {
-            newMessages[newMessages.length - 1] = { ...last, text: last.text + chunk };
-          } else {
-            newMessages = [...newMessages, { from: "bot", text: chunk }];
-          }
-
-          return { ...session, messages: newMessages, isTyping: true };
-        }
-        return session;
+      socketRef.current.send(JSON.stringify({
+        type: "init",
+        sessionId: activeSessionId,
+        provider,
       }));
-    };
-
-    socket.onopen = () => {
-      // Send provider information first
-      socket.send(JSON.stringify({
-        provider: activeSession.provider,
-        sessionId: activeSessionId
-      }));
-
-      console.log("✅ WebSocket connected");
-
       setSessions(prev => prev.map(session =>
         session.id === activeSessionId
-          ? { ...session, isConnected: true, isConnecting: false }
-          : session
-      ));
-    };
-
-    socket.onclose = () => {
-      console.log("❌ WebSocket closed");
-      setSessions(prev => prev.map(session =>
-        session.id === activeSessionId
-          ? { ...session, isConnected: false, isConnecting: false }
-          : session
-      ));
-    };
-
-    socket.onerror = (error) => {
-      console.error("WebSocket error:", error);
-      setSessions(prev => prev.map(session =>
-        session.id === activeSessionId
-          ? { ...session, isConnecting: false }
-          : session
-      ));
-    };
-  };
-
-  const stopAI = () => {
-    if (socketRef.current?.readyState === 1) {
-      socketRef.current.send("__STOP__");
-      setSessions(prev => prev.map(session =>
-        session.id === activeSessionId
-          ? { ...session, isTyping: false }
+          ? { ...session, isConnecting: true }
           : session
       ));
     }
   };
 
+  // Send user message for active session
   const sendMessage = () => {
     if (!activeSession.input.trim() ||
       activeSession.isTyping ||
-      socketRef.current?.readyState !== 1) return;
+      socketRef.current?.readyState !== WebSocket.OPEN) return;
 
     const userMessage = { from: "user", text: activeSession.input };
 
@@ -265,9 +284,30 @@ export default function App() {
       return session;
     }));
 
-    socketRef.current.send(activeSession.input);
+    socketRef.current.send(JSON.stringify({
+      type: "message",
+      sessionId: activeSessionId,
+      text: activeSession.input,
+    }));
   };
 
+  // Stop AI generation for active session
+  const stopAI = () => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({
+        type: "stop",
+        sessionId: activeSessionId,
+      }));
+
+      setSessions(prev => prev.map(session =>
+        session.id === activeSessionId
+          ? { ...session, isTyping: false }
+          : session
+      ));
+    }
+  };
+
+  // Update input text for active session
   const setInput = (value) => {
     setSessions(prev => prev.map(session =>
       session.id === activeSessionId
@@ -276,15 +316,18 @@ export default function App() {
     ));
   };
 
+  if (!isInitialized) {
+    return <div className="app-loading">Loading chats...</div>;
+  }
+
   return (
     <div className="app-container">
       <Sidebar
         sessions={sessions}
         activeSessionId={activeSessionId}
-        setActiveSessionId={setActiveSessionId}
+        setActiveSessionId={switchSession}
         createNewSession={createNewSession}
-        deleteSession={deleteSession} // Pass delete function
-        socketRef={socketRef}
+        deleteSession={deleteSession}
         isLoadingContext={activeSession.isLoadingContext}
         setIsLoadingContext={(value) => {
           setSessions(prev => prev.map(session =>
@@ -307,16 +350,28 @@ export default function App() {
               >
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Anthropic</option>
-                {/* <option value="groq">Groq</option> */}
-                {/* <option value="ollama">Ollama</option> */}
                 <option value="gemini">Gemini</option>
-                {/* <option value="openrouter">OpenRouter</option> */}
+                {/* Add other providers as needed */}
               </select>
             </div>
 
             <button
               className={`connect-button ${activeSession.isConnecting ? 'connecting' : ''}`}
-              onClick={connectToLLM}
+              onClick={() => {
+                // On connect button click, send init message again
+                if (socketRef.current?.readyState === WebSocket.OPEN) {
+                  socketRef.current.send(JSON.stringify({
+                    type: "init",
+                    sessionId: activeSessionId,
+                    provider: activeSession.provider,
+                  }));
+                  setSessions(prev => prev.map(session =>
+                    session.id === activeSessionId
+                      ? { ...session, isConnecting: true }
+                      : session
+                  ));
+                }
+              }}
               disabled={activeSession.isConnecting}
             >
               {activeSession.isConnecting ? 'Connecting...' : `Connect to ${activeSession.provider.toUpperCase()}`}

@@ -3,7 +3,7 @@ import subprocess
 import sys
 import uuid
 import asyncio
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 import instructor
 from atomic_agents.agents.base_agent import BaseAgent, BaseAgentConfig, BaseAgentInputSchema, BaseAgentOutputSchema, SystemPromptGenerator
@@ -312,78 +312,127 @@ class Session:
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     print("WebSocket connection established")
-    try:
-        # Step 1: Get provider selection from client
-        provider_data = await websocket.receive_text()
-        print(f"Received provider data: {provider_data}")
-        
-        try:
-            provider_info = json.loads(provider_data)
-            provider = provider_info.get("provider")
-            session_id = provider_info.get("sessionId")
-            
-            if not provider or not session_id:
-                error_msg = "Missing provider or session ID"
-                print(error_msg)
-                await websocket.send_text(f"[ERROR] {error_msg}")
-                await websocket.close(code=1008)
-                return
-        except json.JSONDecodeError as e:
-            error_msg = f"Invalid provider format: {str(e)}"
-            print(error_msg)
-            await websocket.send_text(f"[ERROR] {error_msg}")
-            await websocket.close(code=1008)
-            return
-        
-        # Step 2: Create or retrieve session
-        if session_id not in sessions:
-            sessions[session_id] = Session(session_id)
-            print(f"Created new session: {session_id}")
-        
-        session = sessions[session_id]
 
-        # Initialize agent if not already done
-        if not session.agent or session.provider != provider:
-            try:
-                await session.initialize_agent(provider)
-                print(f"Initialized agent for session {session_id} with provider {provider}")
-            except Exception as e:
-                error_msg = f"Agent initialization failed: {str(e)}"
-                print(error_msg)
-                traceback.print_exc()
-                await websocket.send_text(f"[ERROR] {error_msg}")
-                await websocket.close(code=1011)
-                return
-        
-        # Send initial message if it exists
-        if session.memory.get_message_count() > 0 and session.memory.history[-1].role == "assistant":
-            last_message = session.memory.history[-1].content.chat_message
-            await websocket.send_text(last_message)
-            await websocket.send_text("[[END]]") 
-        
-        # Step 3: Handle messages
+    # Keep track of sessionId -> Session instances active on this WS connection
+    active_sessions: Dict[str, Session] = {}
+
+    try:
         while True:
             data = await websocket.receive_text()
-            
-            if data == "__STOP__":
-                print("Received STOP command")
-                await websocket.send_text("[[END]]")
+            try:
+                message = json.loads(data)
+            except json.JSONDecodeError:
+                await websocket.send_text(json.dumps({
+                    "sessionId": None,
+                    "token": "[ERROR] Invalid JSON message"
+                }))
                 continue
-                
-            await session.save_message("user", data)
-            
-            # Normal message processing
-            session.active_generation = asyncio.create_task(
-                stream_to_websocket(session, websocket, data)
-            )
-            await session.active_generation
-            
+
+            msg_type = message.get("type")
+            session_id = message.get("sessionId")
+
+            if msg_type == "init":
+                provider = message.get("provider")
+                if not session_id or not provider:
+                    await websocket.send_text(json.dumps({
+                        "sessionId": session_id,
+                        "token": "[ERROR] 'sessionId' and 'provider' required in init"
+                    }))
+                    continue
+
+                # Create or reuse Session object
+                if session_id not in sessions:
+                    sessions[session_id] = Session(session_id)
+                    print(f"Created new session: {session_id}")
+                session = sessions[session_id]
+
+                try:
+                    await session.initialize_agent(provider)
+                    active_sessions[session_id] = session
+                    print(f"Initialized agent for session {session_id} with provider {provider}")
+
+                    # Send last assistant message if exists
+                    if session.memory.get_message_count() > 0 and session.memory.history[-1].role == "assistant":
+                        last_message = session.memory.history[-1].content.chat_message
+                        await websocket.send_text(json.dumps({
+                            "sessionId": session_id,
+                            "token": last_message
+                        }))
+                        await websocket.send_text(json.dumps({
+                            "sessionId": session_id,
+                            "token": "[[END]]"
+                        }))
+
+                except Exception as e:
+                    error_msg = f"Agent initialization failed: {str(e)}"
+                    print(error_msg)
+                    await websocket.send_text(json.dumps({
+                        "sessionId": session_id,
+                        "token": f"[ERROR] {error_msg}"
+                    }))
+                    continue
+
+            elif msg_type == "message":
+                if not session_id or session_id not in active_sessions:
+                    await websocket.send_text(json.dumps({
+                        "sessionId": session_id,
+                        "token": "[ERROR] Session not initialized or invalid"
+                    }))
+                    continue
+
+                text = message.get("text")
+                if not text:
+                    continue
+
+                session = active_sessions[session_id]
+                await session.save_message("user", text)
+
+                async def stream():
+                    try:
+                        async for token in session.stream_response(text):
+                            await websocket.send_text(json.dumps({
+                                "sessionId": session_id,
+                                "token": token
+                            }))
+                    except Exception as e:
+                        await websocket.send_text(json.dumps({
+                            "sessionId": session_id,
+                            "token": f"[ERROR] {str(e)}"
+                        }))
+                    finally:
+                        await websocket.send_text(json.dumps({
+                            "sessionId": session_id,
+                            "token": "[[END]]"
+                        }))
+
+                # Run the stream and wait for it to complete
+                await stream()
+
+            elif msg_type == "stop":
+                if not session_id or session_id not in active_sessions:
+                    await websocket.send_text(json.dumps({
+                        "sessionId": session_id,
+                        "token": "[ERROR] Session not initialized or invalid"
+                    }))
+                    continue
+
+                # Optional: implement cancellation logic per session here
+                # For now just send [[END]]
+                await websocket.send_text(json.dumps({
+                    "sessionId": session_id,
+                    "token": "[[END]]"
+                }))
+
+            else:
+                await websocket.send_text(json.dumps({
+                    "sessionId": session_id,
+                    "token": "[ERROR] Unknown message type"
+                }))
+
     except WebSocketDisconnect:
         print("Client disconnected")
-        pass
     except Exception as e:
-        error_msg = f"WebSocket error: {str(e)}"
-        print(error_msg)
+        print(f"WebSocket error: {str(e)}")
         traceback.print_exc()
         await websocket.close(code=1011)
 
