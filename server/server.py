@@ -4,7 +4,7 @@ import asyncio
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import instructor
-from atomic_agents.agents.base_agent import BaseAgent, BaseAgentConfig, BaseAgentInputSchema
+from atomic_agents.agents.base_agent import BaseAgent, BaseAgentConfig, BaseAgentInputSchema, BaseAgentOutputSchema, SystemPromptGenerator
 from atomic_agents.lib.components.agent_memory import AgentMemory
 from typing import Dict, List, Set, AsyncGenerator, Optional
 import aiofiles
@@ -23,13 +23,12 @@ app.add_middleware(
 )
 
 dotenv.load_dotenv()
-# Global state
+
 sessions: Dict[str, 'Session'] = {}
 UPLOAD_DIR = "user_files"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 file_map: Dict[str, str] = {}  # {file_key: original_name}
 
-# Provider setup
 class Session:
     def __init__(self, session_id: str):
         self.session_id = session_id
@@ -42,14 +41,30 @@ class Session:
         client, model = self.setup_client(provider)
         self.memory = AgentMemory()
         
-        # Add initial welcome message
-        # self.memory.add_message("assistant", {"chat_message": "Hello! How can I assist you today?"})
+        system_prompt_geospatial = SystemPromptGenerator(
+            background=[
+                "You are an expert in ONLY geospatial reasoning and you are a geospatial DB manager.",
+                "Your tone is highly professional and technical."
+            ],
+            steps=[
+                "Make sure the prompt is strictly related to geospatial concepts.",
+                "Understand the user's intent and and goal step-by-step.",
+            ],
+            output_instructions=[
+                "You will only respond to users' prompts if they are related to geospatial tasks; otherwise you throw a small cute tantrum and respond with you only deal woth geospatial tasks.",
+            ],
+        )
+
+        initial_message = "Hello! How can I assist you today?"
+        initial_schema = BaseAgentOutputSchema(chat_message=initial_message)
+        self.memory.add_message("assistant", content=initial_schema)
         
         self.agent = BaseAgent(
             config=BaseAgentConfig(
                 client=client,
                 model=model,
                 memory=self.memory,
+                system_prompt_generator=system_prompt_geospatial,
                 model_api_parameters={"max_tokens": 2048}
             )
         )
@@ -57,7 +72,6 @@ class Session:
     
     def setup_client(self, provider):
         provider = provider.lower()
-        print(f"Setting up provider: {provider}")
         
         if provider == "openai":
             import openai
@@ -66,7 +80,7 @@ class Session:
                 raise ValueError("OPENAI_API_KEY environment variable not set")
                 
             client = instructor.from_openai(openai.AsyncOpenAI(api_key=api_key))
-            model = "gpt-4o"
+            model = "gpt-4o-mini"
             return client, model
 
         elif provider == "anthropic":
@@ -141,27 +155,24 @@ class Session:
             
         print(f"Processing input: '{input_text}'")
         input_schema = BaseAgentInputSchema(chat_message=input_text)
+        # self.memory.add_message("user", content=input_schema)
         
         try:
-            full_response = ""
+            full_response: str = ""
             async for partial_response in self.agent.run_async(input_schema):
-                # Check if we have a valid response object
+
                 if not hasattr(partial_response, "chat_message") or not partial_response.chat_message:
                     continue
-                    
-                # Get the new text since last response
+
                 new_text = partial_response.chat_message[len(full_response):]
                 
-                # Update the full response
-                full_response = partial_response.chat_message
-                
                 if new_text:
-                    print(f"Yielding new text: '{new_text}'")
+                    full_response = partial_response.chat_message
                     yield new_text
-                    
-            # After streaming completes, add the full response to memory
+
             if full_response:
-                self.memory.add_message("assistant", {"chat_message": full_response})
+                output_schema = BaseAgentOutputSchema(chat_message=full_response)
+                self.memory.add_message("assistant", {"chat_message": output_schema})
                 
         except Exception as e:
             traceback.print_exc()
@@ -201,7 +212,7 @@ async def websocket_endpoint(websocket: WebSocket):
             print(f"Created new session: {session_id}")
         
         session = sessions[session_id]
-        
+
         # Initialize agent if not already done
         if not session.agent:
             try:
@@ -215,7 +226,6 @@ async def websocket_endpoint(websocket: WebSocket):
                 await websocket.close(code=1011)
                 return
         
-        # Send welcome message
         await websocket.send_text("Hello! How can I assist you today?")
         await websocket.send_text("[[END]]") 
         print("Sent welcome message")
@@ -267,6 +277,7 @@ async def websocket_endpoint(websocket: WebSocket):
             
     except WebSocketDisconnect:
         print("Client disconnected")
+        pass
     except Exception as e:
         error_msg = f"WebSocket error: {str(e)}"
         print(error_msg)
@@ -279,6 +290,7 @@ async def stream_to_websocket(session: Session, websocket: WebSocket, input_text
             await websocket.send_text(token)
     except asyncio.CancelledError:
         print("Generation cancelled")
+        pass
     except Exception as e:
         error_msg = f"Stream error: {str(e)}"
         print(error_msg)
