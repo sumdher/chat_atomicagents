@@ -1,11 +1,28 @@
 // components/InputArea.jsx
-import React from "react";
+import React, { useRef, useEffect } from 'react';
 import './InputArea.css';
 
 export default function InputArea({ input, setInput, sendMessage, stopAI, isTyping }) {
+    const textareaRef = useRef(null);
+
+    const adjustTextareaHeight = () => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+
+        // Reset height to auto to calculate scrollHeight properly
+        textarea.style.height = 'auto';
+        // Set height to scrollHeight (content height) plus borders (2px)
+        textarea.style.height = `${textarea.scrollHeight + 2}px`;
+    };
+
+    useEffect(() => {
+        adjustTextareaHeight();
+    }, [input]);
+
     return (
         <div className="input-area">
             <textarea
+                ref={textareaRef}
                 className="input-field"
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
@@ -16,7 +33,6 @@ export default function InputArea({ input, setInput, sendMessage, stopAI, isTypi
                     }
                 }}
                 placeholder="Type your message..."
-                rows={1}
             />
             <button
                 className="send-button"

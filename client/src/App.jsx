@@ -85,7 +85,7 @@ const PROVIDER_MODELS = {
     },
     {
       id: 'gpt-4o-mini',
-      name: 'GPT-4 Turbo Mini',
+      name: 'GPT-4o Mini',
       description:
         'Lean version of GPT-4 Turbo for low-latency use. Multimodal capable. Pricing: $0.60 / 1M input, $2.40 / 1M output tokens.'
     },
@@ -165,7 +165,7 @@ const PROVIDER_MODELS = {
 };
 
 const DEFAULT_MODELS = {
-  openai: 'gpt-4-turbo',
+  openai: 'gpt-4.1',
   anthropic: 'claude-3-sonnet-20240229',
   gemini: 'gemini-1.5-pro'
 };
