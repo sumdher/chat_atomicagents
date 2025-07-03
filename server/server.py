@@ -243,7 +243,7 @@ class Session:
             return client
 
         elif provider == "gemini":
-            from openai import OpenAI
+            from openai import OpenAI, AsyncOpenAI
             # import google.generativeai as genai
             # genai.configure(api_key=api_key)
             
@@ -252,7 +252,7 @@ class Session:
                 raise ValueError("GEMINI_API_KEY environment variable not set")
 
             client = instructor.from_openai(
-                OpenAI(api_key=api_key, base_url="https://generativelanguage.googleapis.com/v1beta/openai/"),
+                AsyncOpenAI(api_key=api_key, base_url="https://generativelanguage.googleapis.com/v1beta/openai/"),
                 mode=instructor.Mode.JSON,
             )
             return client
