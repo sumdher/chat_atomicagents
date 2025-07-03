@@ -164,8 +164,6 @@ const PROVIDER_MODELS = {
   ]
 };
 
-
-
 const DEFAULT_MODELS = {
   openai: 'gpt-4-turbo',
   anthropic: 'claude-3-sonnet-20240229',
@@ -190,14 +188,6 @@ function createDefaultSession() {
   };
 }
 
-const setSessionModel = (model) => {
-  setSessions(prev => prev.map(session =>
-    session.id === activeSessionId
-      ? { ...session, model }
-      : session
-  ));
-};
-
 export default function App() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [sessions, setSessions] = useState([]);
@@ -212,7 +202,6 @@ export default function App() {
         : session
     ));
 
-    // Send init message if WebSocket is open
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({
         type: "init",
@@ -223,13 +212,23 @@ export default function App() {
     }
   };
 
-  // Helper function to get model display name
+  const getProviderDisplayName = (provider) => {
+    const providerNames = {
+      openai: "OpenAI",
+      anthropic: "Anthropic",
+      gemini: "Gemini"
+    };
+    return providerNames[provider] || provider;
+  };
+
   const getModelDisplayName = (session) => {
     if (!session || !session.provider || !session.model) return null;
     const providerModels = PROVIDER_MODELS[session.provider] || [];
     const model = providerModels.find(m => m.id === session.model);
     return model ? model.name : null;
   };
+
+
 
   useEffect(() => {
     const savedSessions = localStorage.getItem('chat_sessions');
@@ -402,11 +401,8 @@ export default function App() {
   }, []);
 
   const activeSession = sessions.find(session => session.id === activeSessionId) || sessions[0];
-
-  // Get the display name for the current model
   const modelDisplayName = getModelDisplayName(activeSession);
 
-  // Create new session and init on server
   const createNewSession = () => {
     const currentProvider = activeSession.provider;
     const newSession = {
@@ -418,12 +414,10 @@ export default function App() {
     setSessions(prev => [...prev, newSession]);
     setActiveSessionId(newSession.id);
 
-    // Send init message for new session when activeSessionId changes (handled by useEffect)
   };
 
-  // Delete a session
   const deleteSession = (id) => {
-    if (sessions.length <= 1) return; // Prevent deleting last session
+    if (sessions.length <= 1) return;
 
     setSessions(prev => prev.filter(session => session.id !== id));
 
@@ -433,7 +427,6 @@ export default function App() {
     }
   };
 
-  // When user switches active session, send init for that session
   const switchSession = (id) => {
     setActiveSessionId(id);
 
@@ -521,7 +514,11 @@ export default function App() {
   if (!isInitialized) {
     return <div className="app-loading">Loading chats...</div>;
   }
-
+  
+  const headerTitle = activeSession.hasBeenConnected
+    ? (modelDisplayName || activeSession.model)
+    : getProviderDisplayName(activeSession.provider);
+  
   return (
     <div className="app-container">
       <Sidebar
@@ -540,7 +537,7 @@ export default function App() {
         }}
       />
       <div className="main">
-        <Header modelName={modelDisplayName} />
+        <Header title={headerTitle} />
         {!activeSession.isConnected && !activeSession.hasBeenConnected ? (
           <div className="connect-screen">
             <div className="provider-selection">
