@@ -8,20 +8,45 @@ import './App.css';
 
 const PROVIDER_MODELS = {
   openai: [
+    
+    { id: 'gpt-4.1', name: 'GPT-4.1', description: 'Flagship GPT model for complex tasks' },
+    { id: 'gpt-4.1-mini', name: 'GPT-4.1 Mini', description: 'Balanced for intelligence, speed and cost' },
+    { id: 'gpt-4.1-nano', name: 'GPT-4.1 Nano', description: 'Fastest, most cost-effecttive GPT-4.1 model' },
+    { id: 'gpt-4o', name: 'GPT-4o', description: 'Fast, intellinent, flexible GPT model' },
     { id: 'gpt-4o-mini', name: 'GPT-4 Mini', description: 'GPT-4o Mini' },
+    
+    { id: 'o3', name: 'o3', description: 'Most poweful reasoning model' },
+    { id: 'o3-mini', name: 'o3-mini', description: 'A small model alternative to o3' },
+    { id: 'o3-deep-research', name: 'o3-deep-research', description: 'Most powerful deep research model' },
+    { id: 'o3-mini-deep-research', name: 'o3-mini-deep-research', description: 'Faster, more affordable research model' },
+    { id: 'o4-mini', name: 'o4-mini', description: 'Faster, more affordable reasoning model' },
+    
+
+    // old
     { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'Latest GPT-4 model with improved capabilities and knowledge' },
     { id: 'gpt-4', name: 'GPT-4', description: 'Previous generation of GPT-4' },
     { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Faster and cheaper than GPT-4' },
   ],
-  anthropic: [
-    { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: 'Most powerful model for highly complex tasks' },
-    { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet', description: 'Ideal balance of intelligence and speed' },
-    { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', description: 'Fastest and most compact model' },
+  anthropic: [    
+    { id: 'claude-opus-4-20250514', name: 'Claude Opus 4', description: 'Highest level of intelligence and capability' },
+    { id: 'claude-sonnnet-4-20250514', name: 'Claude Sonnet 4', description: 'High intelligence and balanced performance' },
+    { id: 'claude-3-7-sonnnet-latest', name: 'Claude Sonnet 3.7', description: 'High intelligence with toggleable extended thinking' },
+    { id: 'claude-3-5-haiku-latest', name: 'Claude Haiku 3.5', description: 'Intelligence at blazing speeds' },
+
+    { id: 'claude-3-5-sonnet-latest', name: 'Claude Sonnet 3.5 v2', description: '...' },
+    { id: 'claude-3-5-sonnet-20240620', name: 'Claude Sonnet 3.5', description: 'High level of intelligence and capability' },
+    { id: 'claude-3-haiku-20240307', name: 'Claude Haiku 3', description: 'Quick and accurate targeted performance' },
+    { id: 'claude-3-opus-20240229', name: 'Claude Opus 3', description: 'Top-level intelligence, fluency, and understanding' },
   ],
   gemini: [
-    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: 'Latest Gemini model with long context capabilities' },
-    { id: 'gemini-1.0-pro', name: 'Gemini 1.0 Pro', description: 'Previous generation of Gemini Pro' },
-    { id: 'gemini-1.5-flash-latest', name: 'Gemini 1.5 Flash', description: 'Gemini 1.5 flash Latest' },
+    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', description: 'Enhanced thinking and reasoning, multimodal understanding, advanced coding, and more' },
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', description: 'Adaptive thinking, cost efficiency' },
+    { id: 'gemini-2.5-flash-lite-preview-06-17', name: 'Gemini 2.5 Flash-Lite Preview', description: 'Most cost-efficient model supporting high throughput' },
+    { id: 'gemini-2.0-flash', name: 'Gemini 2.5 Pro', description: 'Next generation features, speed, and realtime streaming' },
+    { id: 'gemini-2.0-flash-lite', name: 'Gemini 2.0 Flash-Lite', description: 'Cost efficiency and low latency' },
+    { id: 'gemini-1.5-flash', name: 'Gemini 1.5 Flash', description: 'Fast and versatile performance across a diverse variety of tasks' },
+    { id: 'gemini-1.5-flash-8b', name: 'Gemini 1.5 Flash 8B', description: 'High volume and lower intelligence tasks' },
+    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: 'Complex reasoning tasks requiring more intelligence' },
   ]
 };
 

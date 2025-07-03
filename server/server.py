@@ -211,42 +211,50 @@ class Session:
         
         if provider == "openai":
             import openai
+            from openai import AsyncOpenAI
             api_key = os.getenv("OPENAI_API_KEY")
             if not api_key:
                 raise ValueError("OPENAI_API_KEY environment variable not set")
                 
-            client = instructor.from_openai(openai.AsyncOpenAI(api_key=api_key))
+            client = instructor.from_openai(AsyncOpenAI(api_key=api_key))
             return client
 
         elif provider == "anthropic":
             import anthropic
+            from anthropic import AsyncAnthropic
             api_key = os.getenv("ANTHROPIC_API_KEY")
             if not api_key:
                 raise ValueError("ANTHROPIC_API_KEY environment variable not set")
                 
-            client = instructor.from_anthropic(anthropic.AsyncAnthropic(api_key=api_key))
+            client = instructor.from_anthropic(AsyncAnthropic(api_key=api_key))
             return client
 
         elif provider == "groq":
             import groq
+            from groq import AsyncGroq
             api_key = os.getenv("GROQ_API_KEY")
             if not api_key:
                 raise ValueError("GROQ_API_KEY environment variable not set")
                 
             client = instructor.from_groq(
-                groq.AsyncGroq(api_key=api_key),
+                AsyncGroq(api_key=api_key),
                 mode=instructor.Mode.JSON
             )
             return client
 
         elif provider == "gemini":
-            import google.generativeai as genai
+            from openai import OpenAI
+            # import google.generativeai as genai
+            # genai.configure(api_key=api_key)
+            
             api_key = os.getenv("GEMINI_API_KEY")
             if not api_key:
                 raise ValueError("GEMINI_API_KEY environment variable not set")
-                
-            genai.configure(api_key=api_key)
-            client = genai.AsyncClient()
+
+            client = instructor.from_openai(
+                OpenAI(api_key=api_key, base_url="https://generativelanguage.googleapis.com/v1beta/openai/"),
+                mode=instructor.Mode.JSON,
+            )
             return client
 
         else:
