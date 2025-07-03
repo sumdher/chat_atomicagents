@@ -8,15 +8,15 @@
   --primary-color: #d0d0d0;
 
   --background-dark: #121212;
-  --background-kinda-dark: #242424;     /* Slightly lighter for contrast layers */
-  --surface-dark: #181818;              /* Used for cards, modals, etc. */
+  --background-kinda-dark: #242424;
+  --surface-dark: #181818;
   
-  --text-primary: #ebebeb;              /* Pure white for strong contrast */
-  --text-secondary: #a0a0a0;            /* Muted grey for less important text */
+  --text-primary: #ebebeb;
+  --text-secondary: #a0a0a0;
   
-  --border-color: #2a2a2a;              /* Optional: subtle border color */
+  --border-color: #2a2a2a;
   
-  --highlight-color: #ffffff;           /* Optional: for hover or subtle highlights */
+  --highlight-color: #ffffff;
 }
 
 .connect-screen {

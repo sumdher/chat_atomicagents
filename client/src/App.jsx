@@ -6,7 +6,33 @@ import ChatArea from "./components/ChatArea/ChatArea";
 import InputArea from "./components/InputArea/InputArea";
 import './App.css';
 
+const PROVIDER_MODELS = {
+  openai: [
+    { id: 'gpt-4o-mini', name: 'GPT-4 Mini', description: 'GPT-4o Mini' },
+    { id: 'gpt-4-turbo', name: 'GPT-4 Turbo', description: 'Latest GPT-4 model with improved capabilities and knowledge' },
+    { id: 'gpt-4', name: 'GPT-4', description: 'Previous generation of GPT-4' },
+    { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo', description: 'Faster and cheaper than GPT-4' },
+  ],
+  anthropic: [
+    { id: 'claude-3-opus-20240229', name: 'Claude 3 Opus', description: 'Most powerful model for highly complex tasks' },
+    { id: 'claude-3-sonnet-20240229', name: 'Claude 3 Sonnet', description: 'Ideal balance of intelligence and speed' },
+    { id: 'claude-3-haiku-20240307', name: 'Claude 3 Haiku', description: 'Fastest and most compact model' },
+  ],
+  gemini: [
+    { id: 'gemini-1.5-pro', name: 'Gemini 1.5 Pro', description: 'Latest Gemini model with long context capabilities' },
+    { id: 'gemini-1.0-pro', name: 'Gemini 1.0 Pro', description: 'Previous generation of Gemini Pro' },
+    { id: 'gemini-1.5-flash-latest', name: 'Gemini 1.5 Flash', description: 'Gemini 1.5 flash Latest' },
+  ]
+};
+
+const DEFAULT_MODELS = {
+  openai: 'gpt-4-turbo',
+  anthropic: 'claude-3-sonnet-20240229',
+  gemini: 'gemini-1.5-pro'
+};
+
 function createDefaultSession() {
+  const provider = "openai";
   return {
     id: uuidv4(),
     title: "New Chat",
@@ -17,9 +43,19 @@ function createDefaultSession() {
     isTyping: false,
     isLoadingContext: false,
     input: "",
-    provider: "openai"
+    provider: provider,
+    model: DEFAULT_MODELS[provider],
+    hasBeenConnected: false
   };
 }
+
+const setSessionModel = (model) => {
+  setSessions(prev => prev.map(session =>
+    session.id === activeSessionId
+      ? { ...session, model }
+      : session
+  ));
+};
 
 export default function App() {
   const [isInitialized, setIsInitialized] = useState(false);
@@ -27,7 +63,25 @@ export default function App() {
   const [activeSessionId, setActiveSessionId] = useState(null);
   const socketRef = useRef(null);
 
-  // Initialize sessions from localStorage
+  const selectModelAndConnect = (modelId) => {
+    // Update the model in state
+    setSessions(prev => prev.map(session =>
+      session.id === activeSessionId
+        ? { ...session, model: modelId, isConnecting: true }
+        : session
+    ));
+
+    // Send init message if WebSocket is open
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({
+        type: "init",
+        sessionId: activeSessionId,
+        provider: activeSession.provider,
+        model: modelId,
+      }));
+    }
+  };
+
   useEffect(() => {
     const savedSessions = localStorage.getItem('chat_sessions');
     const savedActiveId = localStorage.getItem('active_session_id');
@@ -45,7 +99,8 @@ export default function App() {
           isConnecting: false,
           isTyping: false,
           isLoadingContext: false,
-          input: ""
+          input: "",
+          hasBeenConnected: s.hasBeenConnected ?? true,
         }));
         initialActiveId = savedActiveId || (parsed[0]?.id || null);
       } catch (e) {
@@ -72,7 +127,9 @@ export default function App() {
       title: s.title,
       messages: s.messages,
       loadedKeys: Array.from(s.loadedKeys),
-      provider: s.provider
+      provider: s.provider,
+      model: s.model,
+      hasBeenConnected: s.hasBeenConnected,
     }));
 
     localStorage.setItem('chat_sessions', JSON.stringify(sessionsToSave));
@@ -110,6 +167,7 @@ export default function App() {
             type: "init",
             sessionId: activeSessionId,
             provider: activeSession.provider,
+            model: activeSession.model,
           }));
           setSessions(prev => prev.map(session =>
             session.id === activeSessionId
@@ -136,6 +194,7 @@ export default function App() {
               isLoadingContext: false,
               isConnected: true,
               isConnecting: false,
+              hasBeenConnected: true,
             };
           }
 
@@ -165,6 +224,7 @@ export default function App() {
             isTyping: true,
             isConnected: true,
             isConnecting: false,
+            hasBeenConnected: true,
           };
         }));
 
@@ -200,6 +260,7 @@ export default function App() {
     const newSession = {
       ...createDefaultSession(),
       provider: currentProvider,
+      model: activeSession.model
     };
 
     setSessions(prev => [...prev, newSession]);
@@ -241,29 +302,19 @@ export default function App() {
     }
   };
 
-  // Change provider of active session and re-init connection for that session
   const setSessionProvider = (provider) => {
     setSessions(prev => prev.map(session =>
       session.id === activeSessionId
-        ? { ...session, provider }
+        ? {
+          ...session,
+          provider,
+          model: DEFAULT_MODELS[provider]
+        }
         : session
     ));
-
-    if (socketRef.current?.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify({
-        type: "init",
-        sessionId: activeSessionId,
-        provider,
-      }));
-      setSessions(prev => prev.map(session =>
-        session.id === activeSessionId
-          ? { ...session, isConnecting: true }
-          : session
-      ));
-    }
   };
 
-  // Send user message for active session
+
   const sendMessage = () => {
     if (!activeSession.input.trim() ||
       activeSession.isTyping ||
@@ -338,7 +389,7 @@ export default function App() {
       />
       <div className="main">
         <Header />
-        {!activeSession.isConnected ? (
+        {!activeSession.isConnected && !activeSession.hasBeenConnected ? (
           <div className="connect-screen">
             <div className="provider-selection">
               <label>Select AI Provider:</label>
@@ -350,31 +401,25 @@ export default function App() {
                 <option value="openai">OpenAI</option>
                 <option value="anthropic">Anthropic</option>
                 <option value="gemini">Gemini</option>
-                {/* Add other providers as needed */}
               </select>
             </div>
 
-            <button
-              className={`connect-button ${activeSession.isConnecting ? 'connecting' : ''}`}
-              onClick={() => {
-                // On connect button click, send init message again
-                if (socketRef.current?.readyState === WebSocket.OPEN) {
-                  socketRef.current.send(JSON.stringify({
-                    type: "init",
-                    sessionId: activeSessionId,
-                    provider: activeSession.provider,
-                  }));
-                  setSessions(prev => prev.map(session =>
-                    session.id === activeSessionId
-                      ? { ...session, isConnecting: true }
-                      : session
-                  ));
-                }
-              }}
-              disabled={activeSession.isConnecting}
-            >
-              {activeSession.isConnecting ? 'Connecting...' : `Connect to ${activeSession.provider.toUpperCase()}`}
-            </button>
+            <div className="model-grid">
+              {PROVIDER_MODELS[activeSession.provider]?.map((model) => (
+                <button
+                  key={model.id}
+                  className={`model-card ${activeSession.model === model.id ? 'selected' : ''}`}
+                  onClick={() => selectModelAndConnect(model.id)}
+                  disabled={activeSession.isConnecting}
+                >
+                  <h4>{model.name}</h4>
+                  <p>{model.description}</p>
+                  {activeSession.model === model.id && activeSession.isConnecting && (
+                    <div className="model-card-spinner"></div>
+                  )}
+                </button>
+              ))}
+            </div>
           </div>
         ) : (
           <>
