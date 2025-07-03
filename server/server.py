@@ -35,23 +35,30 @@ os.makedirs(os.path.join(DATA_DIR, "user_files"), exist_ok=True)
 def start_database():
     """Start the PostgreSQL Docker container if not running"""
     try:
-        # Check if Docker is installed
-        subprocess.run(["docker", "--version"], check=True, 
-                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        
-        script_path = os.path.join(DATA_DIR, "docker-db.sh")
-        if os.path.exists(script_path):
-            subprocess.run(["bash", script_path], check=True)
-            print("✅ PostgreSQL container started successfully")
+        subprocess.run(["docker", "--version"], check=True,
+                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+        if sys.platform == "win32":
+            script_path = os.path.join(DATA_DIR, "docker-db.bat")
+            if os.path.exists(script_path):
+                subprocess.run(["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", script_path], check=True, shell=True)
+                print("✅ PostgreSQL container started successfully")
+            else:
+                print(f"⚠ docker-db.ps1 not found at {script_path}. Using existing DB connection.")
         else:
-            print(f"⚠️ docker-db.sh script not found at {script_path}. Using existing DB connection.")
+            script_path = os.path.join(DATA_DIR, "docker-db.sh")
+            if os.path.exists(script_path):
+                subprocess.run(["bash", script_path], check=True)
+                print("✅ PostgreSQL container started successfully")
+            else:
+                print(f"⚠ docker-db.sh not found at {script_path}. Using existing DB connection.")
+                
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         print(f"❌ Docker error: {str(e)}. Using existing database connection.")
 
 async def stop_database():
     """Stop the PostgreSQL Docker container if running"""
     try:
-        # Check if container exists and is running
         process = await asyncio.create_subprocess_exec(
             "docker", "stop", DB_CONTAINER_NAME,
             stdout=asyncio.subprocess.PIPE,
@@ -74,7 +81,6 @@ async def lifespan(app: FastAPI):
     start_database()
     await asyncio.sleep(2)
     
-    # Create database connection pool
     app.state.db_pool = await asyncpg.create_pool(
         DATABASE_URL, 
         min_size=5, 
@@ -82,13 +88,11 @@ async def lifespan(app: FastAPI):
         command_timeout=60
     )
     
-    # Initialize database tables
     await init_db(app.state.db_pool)
     print("✅ Database connected and initialized")
     
     yield
     
-    # Shutdown
     await app.state.db_pool.close()
     print("❌ Database connection closed")
     await stop_database()
@@ -128,7 +132,6 @@ class Session:
         client, model = self.setup_client(provider)
         self.model = model
         
-        # Create or update session in database
         async with app.state.db_pool.acquire() as conn:
             await conn.execute('''
                 INSERT INTO chat_sessions (id, provider, model, created_at, updated_at)
@@ -137,7 +140,6 @@ class Session:
                 SET updated_at = EXCLUDED.updated_at
             ''', self.session_id, provider, model, datetime.utcnow(), datetime.utcnow())
         
-        # Load chat history from database
         if not self.history_loaded:
             await self.load_history()
             self.history_loaded = True
@@ -156,7 +158,6 @@ class Session:
             ],
         )
 
-        # Add initial message if no history exists
         if self.memory.get_message_count() == 0:
             initial_message = "Hello! How can I assist you today?"
             initial_schema = BaseAgentOutputSchema(chat_message=initial_message)
@@ -316,7 +317,6 @@ async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     print("WebSocket connection established")
 
-    # Keep track of sessionId -> Session instances active on this WS connection
     active_sessions: Dict[str, Session] = {}
 
     try:
@@ -408,7 +408,6 @@ async def websocket_endpoint(websocket: WebSocket):
                             "token": "[[END]]"
                         }))
 
-                # Run the stream and wait for it to complete
                 await stream()
 
             elif msg_type == "stop":
@@ -419,8 +418,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     }))
                     continue
 
-                # Optional: implement cancellation logic per session here
-                # For now just send [[END]]
                 await websocket.send_text(json.dumps({
                     "sessionId": session_id,
                     "token": "[[END]]"
@@ -457,7 +454,6 @@ async def stream_to_websocket(session: Session, websocket: WebSocket, input_text
 async def init_db(pool):
     try:
         async with pool.acquire() as conn:
-            # Create tables if they don't exist
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS chat_sessions (
                     id TEXT PRIMARY KEY,
