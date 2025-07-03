@@ -116,6 +116,7 @@ class Session:
         self.provider = None
         self.model = None
         self.memory = AgentMemory()
+        self.history_loaded: bool = False
         
     async def initialize_agent(self, provider: str):
         """Initialize agent after provider is known"""
@@ -137,7 +138,9 @@ class Session:
             ''', self.session_id, provider, model, datetime.utcnow(), datetime.utcnow())
         
         # Load chat history from database
-        await self.load_history()
+        if not self.history_loaded:
+            await self.load_history()
+            self.history_loaded = True
         
         system_prompt_geospatial = SystemPromptGenerator(
             background=[
@@ -339,25 +342,25 @@ async def websocket_endpoint(websocket: WebSocket):
                         "token": "[ERROR] 'sessionId' and 'provider' required in init"
                     }))
                     continue
-
                 # Create or reuse Session object
                 if session_id not in sessions:
                     sessions[session_id] = Session(session_id)
                     print(f"Created new session: {session_id}")
-                session = sessions[session_id]
 
+                is_new_session = session_id not in sessions
+                session = sessions[session_id]
+                
                 try:
                     await session.initialize_agent(provider)
                     active_sessions[session_id] = session
                     print(f"Initialized agent for session {session_id} with provider {provider}")
 
-                    # Send last assistant message if exists
-                    if session.memory.get_message_count() > 0 and session.memory.history[-1].role == "assistant":
+                    if  session.memory.get_message_count() > 0 and session.memory.history[-1].role == "assistant":
                         last_message = session.memory.history[-1].content.chat_message
-                        await websocket.send_text(json.dumps({
-                            "sessionId": session_id,
-                            "token": last_message
-                        }))
+                        # await websocket.send_text(json.dumps({
+                        #     "sessionId": session_id,
+                        #     "token": last_message
+                        # }))
                         await websocket.send_text(json.dumps({
                             "sessionId": session_id,
                             "token": "[[END]]"
@@ -485,8 +488,6 @@ async def init_db(pool):
         print(f"❌ Database initialization failed: {str(e)}")
         traceback.print_exc()
 
-
-# ... previous code ...
 
 if __name__ == "__main__":
     import uvicorn
