@@ -33,7 +33,7 @@ echo -e "(bash) ${MAGENTA}${BOLD}Starting Frontend client...${NC}"
 cd ../client
 npm run dev &
 client_pid=$!
-sleep 4
+sleep 2
 echo
 echo -e "(bash) ${MAGENTA}${BOLD}Frontend client started at${NC} ${YELLOW}PID: $client_pid${MAGENTA}; Backend server at${NC} ${YELLOW}PID: $server_pid${NC}"
 echo -e "(bash) ${MAGENTA}${BOLD}Press${NC} ${WHITE}${BOLD} CTRL + C  ${MAGENTA}${BOLD}to exit${NC}"
