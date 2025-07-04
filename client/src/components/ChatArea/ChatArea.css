@@ -6,15 +6,14 @@
   width: 100%;
   max-width: 1000px;
   margin: 0 auto;
-  box-sizing: border-box;
-  position: relative;
 }
 
 .messages-wrapper {
   flex: 1;
   min-height: 0;
   padding: 1rem 1.5rem;
-
+  overflow-y: auto;
+  scroll-behavior: smooth;
 }
 
 .messages {
@@ -23,7 +22,6 @@
   gap: 1rem;
   min-height: min-content;
   padding-bottom: 100px;
-
 }
 
 .message-row {
@@ -41,11 +39,11 @@
   word-break: break-word;
   padding: 0.75rem 1rem;
   border-radius: 0.5rem;
-  font-size: 1.2rem;
-  letter-spacing: 0.05rem;
-  font-weight: 600;
+  font-size: 1.1rem;
+  letter-spacing: 0.03rem;
+  font-weight: 450;
   line-height: 0;
-  margin: 0;
+  margin: 1rem;
 }
 
 .message-bubble.user {
