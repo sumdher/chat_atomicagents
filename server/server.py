@@ -357,7 +357,7 @@ async def websocket_endpoint(websocket: WebSocket):
             if msg_type == "init":
                 provider = message.get("provider")
                 model = message.get("model")
-                print(f"Received init for session {session_id} with provider {provider} and model {model}") 
+                # print(f"Received init for session {session_id} with provider {provider} and model {model}") 
                 if not session_id or not provider or not model:
                     await websocket.send_text(json.dumps({
                         "sessionId": session_id,

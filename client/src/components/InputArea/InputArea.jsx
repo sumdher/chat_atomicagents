@@ -9,9 +9,7 @@ export default function InputArea({ input, setInput, sendMessage, stopAI, isTypi
         const textarea = textareaRef.current;
         if (!textarea) return;
 
-        // Reset height to auto to calculate scrollHeight properly
         textarea.style.height = 'auto';
-        // Set height to scrollHeight (content height) plus borders (2px)
         textarea.style.height = `${textarea.scrollHeight + 2}px`;
     };
 

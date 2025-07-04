@@ -1,5 +1,5 @@
 // components/ChatArea.jsx
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import ReactMarkdown from "react-markdown";
 import CodeBlock from './CodeBlock';
 import './ChatArea.css';
@@ -7,7 +7,20 @@ import './ChatArea.css';
 export default function ChatArea({ messages, isTyping, isLoadingContext, onEditMessage }) {
     const [editingIndex, setEditingIndex] = useState(-1);
     const [editText, setEditText] = useState('');
+    const [longMessages, setLongMessages] = useState({});
+    const editInputRef = useRef(null);
 
+    const adjustEditInputHeight = () => {
+        const textarea = editInputRef.current;
+        if (!textarea) return;
+        textarea.style.height = 'auto';
+        textarea.style.height = `${textarea.scrollHeight + 2}px`;
+    };
+
+    useEffect(() => {
+        adjustEditInputHeight();
+    }, [editText]);
+    
     const startEditing = (index, text) => {
         setEditingIndex(index);
         setEditText(text);
@@ -24,6 +37,19 @@ export default function ChatArea({ messages, isTyping, isLoadingContext, onEditM
             cancelEditing();
         }
     };
+    const messageRefs = useRef([]);
+
+    useEffect(() => {
+        const newLongMessages = {};
+        messageRefs.current.forEach((ref, index) => {
+            if (ref && messages[index]?.from === 'user') {
+                const lineHeight = parseInt(getComputedStyle(ref).lineHeight);
+                const height = ref.clientHeight;
+                newLongMessages[index] = height > lineHeight * 10;
+            }
+        });
+        setLongMessages(newLongMessages);
+    }, [messages]);
 
     return (
         <div className="chat-area">
@@ -43,6 +69,7 @@ export default function ChatArea({ messages, isTyping, isLoadingContext, onEditM
                             {msg.from === "user" && editingIndex === i ? (
                                 <div className="message-edit-container">
                                     <textarea
+                                        ref={editInputRef}
                                         value={editText}
                                         onChange={(e) => setEditText(e.target.value)}
                                         autoFocus
@@ -56,13 +83,24 @@ export default function ChatArea({ messages, isTyping, isLoadingContext, onEditM
                             ) : (
                                 <div className={`message-bubble ${msg.from}`}>
                                     {msg.from === "user" && (
-                                        <button
-                                            className="edit-message-btn"
-                                            onClick={() => startEditing(i, msg.text)}
-                                            title="Edit message"
-                                        >
-                                            ✏️
-                                        </button>
+                                        <div className="edit-button-container">
+                                            {longMessages[i] && (
+                                                <button
+                                                    className="edit-message-btn top"
+                                                    onClick={() => startEditing(i, msg.text)}
+                                                    title="Edit message"
+                                                >
+                                                    ✏️
+                                                </button>
+                                            )}
+                                            <button
+                                                className="edit-message-btn bottom"
+                                                onClick={() => startEditing(i, msg.text)}
+                                                title="Edit message"
+                                            >
+                                                ✏️
+                                            </button>
+                                        </div>
                                     )}
                                     {msg.from === "bot" ? (
                                         <ReactMarkdown
@@ -80,7 +118,14 @@ export default function ChatArea({ messages, isTyping, isLoadingContext, onEditM
                                         >
                                             {msg.text}
                                         </ReactMarkdown>
-                                    ) : msg.text}
+                                    ) : (
+                                        <div
+                                            ref={el => messageRefs.current[i] = el}
+                                            className="user-message-content"
+                                        >
+                                            {msg.text}
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>

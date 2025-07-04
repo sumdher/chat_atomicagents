@@ -47,12 +47,14 @@
 }
 
 .message-bubble.user {
+  position: relative;
   background-color: #292929;
   border-radius: 25px;
   padding: 0.6rem 1.7rem;
   color: var(--text-primary);
   line-height: 1.6;
   max-width: 700px;
+  padding-right: 0;
 }
 
 .message-bubble.bot p,
@@ -167,16 +169,12 @@
   }
 }
 
-/* Add these new styles at the bottom */
 .message-bubble.user {
   position: relative;
-  padding-right: 40px;
+  padding-right: 30px;
 }
 
 .edit-message-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
   background: none;
   border: none;
   color: var(--text-secondary);
@@ -185,6 +183,13 @@
   opacity: 0.5;
   transition: opacity 0.2s;
   padding: 4px;
+  position: absolute;
+  right: 8px;
+  z-index: 10;
+}
+
+.edit-message-btn.bottom {
+  bottom: 8px;
 }
 
 .edit-message-btn:hover {
@@ -200,16 +205,21 @@
 
 .message-edit-input {
   width: 100%;
-  min-height: 100px;
   padding: 1rem;
-  border-radius: 8px;
-  background: #333;
+  border-radius: 10px;
+  background: #252500;
   color: var(--text-primary);
-  border: 1px solid #444;
+  border: 3px solid #fff67d;
   font-family: inherit;
   font-size: 1rem;
-  resize: vertical;
+  resize: none;
+  line-height: 1.4;
+  min-height: calc(1.4em * 3);
+  max-height: calc(1.4em * 15);
+  overflow-y: auto;
+  box-sizing: border-box;
 }
+
 
 .message-edit-buttons {
   display: flex;
@@ -227,11 +237,20 @@
 }
 
 .save-edit {
-  background-color: var(--accent);
+  background-color: #444;
   color: white;
 }
 
 .cancel-edit {
   background-color: #444;
   color: var(--text-primary);
+}
+
+.user-message-content {
+  padding-right: 20px;
+}
+
+.save-edit:hover, .cancel-edit:hover {
+  opacity: 1;
+  color: var(--accent);
 }
