@@ -14,7 +14,8 @@
   flex: 1;
   min-height: 0;
   padding: 1rem 1.5rem;
-  
+  overflow-y: auto;
+  scroll-behavior: smooth;
 }
 
 .messages {
@@ -23,6 +24,8 @@
   gap: 1rem;
   min-height: min-content;
   padding-bottom: 100px;
+  overflow-y: auto;
+  scroll-behavior: smooth;
 }
 
 .message-row {
@@ -211,7 +214,7 @@
   font-size: 1rem;
   resize: none;
   line-height: 1.4;
-  min-height: calc(1.4em * 3);
+  min-height: calc(1.4em * 9);
   max-height: calc(1.4em * 15);
   overflow-y: auto;
   box-sizing: border-box;
