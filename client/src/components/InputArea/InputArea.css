@@ -10,13 +10,11 @@
   left: 0;
   width: 100%;
   max-width: 1500px;
-
   border-top: 1px solid #444;
   padding: 1rem;
   backdrop-filter: blur(12px);
   z-index: 10;
 
-  
 }
 
 .input-inner {

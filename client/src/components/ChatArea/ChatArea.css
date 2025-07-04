@@ -14,6 +14,7 @@
   flex: 1;
   min-height: 0;
   padding: 1rem 1.5rem;
+  
 }
 
 .messages {
@@ -169,11 +170,6 @@
   }
 }
 
-/* .message-bubble.user {
-  position: relative;
-  padding-right: 30px;
-} */
-
 .edit-message-btn {
   background: none;
   border: none;
@@ -182,7 +178,8 @@
   font-size: 0.8rem;
   opacity: 0.5;
   transition: opacity 0.2s;
-  padding: 0px;
+  /* padding: 0px; */
+  padding-right: 0.5rem;
   position: absolute;
   right: 0px;
   z-index: 10;
@@ -247,7 +244,8 @@
 }
 
 .user-message-content {
-  padding-right: 10px;
+  padding-right: 15px;
+  padding-left: 5px;
 }
 
 .save-edit:hover, .cancel-edit:hover {
