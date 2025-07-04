@@ -8,19 +8,7 @@ export default function ChatArea({ messages, isTyping, isLoadingContext, onEditM
     const [editingIndex, setEditingIndex] = useState(-1);
     const [editText, setEditText] = useState('');
     const [longMessages, setLongMessages] = useState({});
-    const editInputRef = useRef(null);
 
-    const adjustEditInputHeight = () => {
-        const textarea = editInputRef.current;
-        if (!textarea) return;
-        textarea.style.height = 'auto';
-        textarea.style.height = `${textarea.scrollHeight + 2}px`;
-    };
-
-    useEffect(() => {
-        adjustEditInputHeight();
-    }, [editText]);
-    
     const startEditing = (index, text) => {
         setEditingIndex(index);
         setEditText(text);
@@ -69,7 +57,6 @@ export default function ChatArea({ messages, isTyping, isLoadingContext, onEditM
                             {msg.from === "user" && editingIndex === i ? (
                                 <div className="message-edit-container">
                                     <textarea
-                                        ref={editInputRef}
                                         value={editText}
                                         onChange={(e) => setEditText(e.target.value)}
                                         autoFocus

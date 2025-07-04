@@ -7,7 +7,8 @@
   top: 0;
   z-index: 100;
   backdrop-filter: blur(13px);
-  /* background-color: var(--surface-dark); */
+  display: flex;
+  align-items: center;
 }
 
 .header-title {
@@ -15,4 +16,19 @@
   font-weight: bold;
   font-size: 1.55rem;
   margin: 0;
+  padding-top: 1rem,
+}
+
+.expand-btn {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-size: 1.4rem;
+  cursor: pointer;
+  margin-right: 1rem;
+  transition: transform 0.3s ease;
+}
+
+.expand-btn:hover {
+  transform: scale(1.5);
 }

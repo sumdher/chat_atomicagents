@@ -1,17 +1,31 @@
 /* InputArea.css */
+:root {
+  --sidebar-width: 18rem;
+  --sidebar-width-collapsed: 0rem;
+}
+
 .input-area {
   position: fixed;
   bottom: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(100% - 3rem);
-  max-width: 950px;
-  padding: 1rem 3rem;
+  left: 0;
+  width: 100%;
+  max-width: 1500px;
+
   border-top: 1px solid #444;
-  display: flex;
-  gap: 0.5rem;
-  z-index: 100;
+  padding: 1rem;
   backdrop-filter: blur(12px);
+  z-index: 10;
+
+  
+}
+
+.input-inner {
+  max-width: 950px;
+  margin-inline: auto;
+  display: flex;
+  gap: 2rem;
+  padding-inline: 4rem;
+  /* padding-right: 2rem; */
 }
 
 .input-field {
@@ -44,7 +58,6 @@
   font-size: 1rem;
   font-weight: bold;
   align-self: center;
-  transition: background 0.2s ease;
 }
 
 .send-button:hover {
@@ -56,21 +69,32 @@
   background: #fff;
 }
 
+ /* desktop offset */
 @media (min-width: 840px) {
-  .input-area {
-    transform: translateX(-55%);
-    left: calc(55% + 8rem);
-    width: min(950px, calc(100% - 20rem - 6rem));
+  .app-container[data-collapsed="false"] .input-area {
+    left: var(--sidebar-width);
+    width: calc(100% - var(--sidebar-width));
+  }
+
+  .app-container[data-collapsed="true"] .input-area {
+    left: var(--sidebar-width-collapsed);
+    width: calc(100% - var(--sidebar-width-collapsed));
+
   }
 }
 
+/* small‑screen tweaks */
 @media (max-width: 470px) {
+  .input-inner { 
+    padding-inline: 2rem;
+    padding-left: 1.1rem;
+    gap: 1rem
+   }
+
   .input-field {
     padding: 0.5rem;
-    max-height: calc(1.4em * 3);
+    max-height: calc(1.4em * 4);
   }
 
-  .send-button {
-    padding: 0.5rem 1rem;
-  }
+  .send-button { padding: 0.5rem 1rem; }
 }
