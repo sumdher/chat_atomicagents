@@ -5,6 +5,7 @@ aiosignal==1.3.2
 annotated-types==0.7.0
 anthropic==0.55.0
 anyio==4.9.0
+asyncpg==0.30.0
 atomic-agents==1.1.3
 attrs==25.3.0
 cachetools==5.5.2
