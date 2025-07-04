@@ -180,7 +180,6 @@
   padding-right: 0.7rem;
   position: absolute;
   right: 0px;
-  top: 20px;
   z-index: 10;
 }
 
@@ -216,13 +215,13 @@
   box-sizing: border-box;
 }
 
-
+/* 
 .message-edit-buttons {
   display: flex;
   gap: 0.5rem;
   margin-top: 0.5rem;
   justify-content: flex-end;
-}
+} */
 
 .save-edit, .cancel-edit {
   padding: 0.5rem 1rem;
