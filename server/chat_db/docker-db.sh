@@ -1,5 +1,5 @@
-#!/bin/bash
 # docker-db.sh
+#!/bin/bash
 
 CONTAINER_NAME="chat-app-db"
 DB_USER="chat_user"

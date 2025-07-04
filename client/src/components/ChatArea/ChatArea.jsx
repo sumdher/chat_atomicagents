@@ -1,10 +1,30 @@
 // components/ChatArea.jsx
-import React from "react";
+import React, { useState } from "react";
 import ReactMarkdown from "react-markdown";
 import CodeBlock from './CodeBlock';
 import './ChatArea.css';
 
-export default function ChatArea({ messages, isTyping, isLoadingContext }) {
+export default function ChatArea({ messages, isTyping, isLoadingContext, onEditMessage }) {
+    const [editingIndex, setEditingIndex] = useState(-1);
+    const [editText, setEditText] = useState('');
+
+    const startEditing = (index, text) => {
+        setEditingIndex(index);
+        setEditText(text);
+    };
+
+    const cancelEditing = () => {
+        setEditingIndex(-1);
+        setEditText('');
+    };
+
+    const saveEdit = () => {
+        if (editText.trim() && editingIndex >= 0) {
+            onEditMessage(editingIndex, editText);
+            cancelEditing();
+        }
+    };
+
     return (
         <div className="chat-area">
             <div className="messages-wrapper">
@@ -20,25 +40,49 @@ export default function ChatArea({ messages, isTyping, isLoadingContext }) {
                     )}
                     {messages.map((msg, i) => (
                         <div key={i} className={`message-row ${msg.from}`}>
-                            <div className={`message-bubble ${msg.from}`}>
-                                {msg.from === "bot" ? (
-                                    <ReactMarkdown
-                                        components={{
-                                            code({ inline, className, children }) {
-                                                const match = /language-(\w+)/.exec(className || "");
-                                                const codeString = String(children).trim();
-                                                return !inline && match ? (
-                                                    <CodeBlock language={match[1]} value={codeString} />
-                                                ) : (
-                                                    <code className={className}>{codeString}</code>
-                                                );
-                                            }
-                                        }}
-                                    >
-                                    {msg.text}
-                                    </ReactMarkdown>
-                                ) : msg.text}
-                            </div>
+                            {msg.from === "user" && editingIndex === i ? (
+                                <div className="message-edit-container">
+                                    <textarea
+                                        value={editText}
+                                        onChange={(e) => setEditText(e.target.value)}
+                                        autoFocus
+                                        className="message-edit-input"
+                                    />
+                                    <div className="message-edit-buttons">
+                                        <button onClick={saveEdit} className="save-edit">Save</button>
+                                        <button onClick={cancelEditing} className="cancel-edit">Cancel</button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className={`message-bubble ${msg.from}`}>
+                                    {msg.from === "user" && (
+                                        <button
+                                            className="edit-message-btn"
+                                            onClick={() => startEditing(i, msg.text)}
+                                            title="Edit message"
+                                        >
+                                            ✏️
+                                        </button>
+                                    )}
+                                    {msg.from === "bot" ? (
+                                        <ReactMarkdown
+                                            components={{
+                                                code({ inline, className, children }) {
+                                                    const match = /language-(\w+)/.exec(className || "");
+                                                    const codeString = String(children).trim();
+                                                    return !inline && match ? (
+                                                        <CodeBlock language={match[1]} value={codeString} />
+                                                    ) : (
+                                                        <code className={className}>{codeString}</code>
+                                                    );
+                                                }
+                                            }}
+                                        >
+                                            {msg.text}
+                                        </ReactMarkdown>
+                                    ) : msg.text}
+                                </div>
+                            )}
                         </div>
                     ))}
                     {isLoadingContext && (
@@ -47,8 +91,7 @@ export default function ChatArea({ messages, isTyping, isLoadingContext }) {
                                 loading files to context...
                             </div>
                         </div>
-                    )
-                    }
+                    )}
                     {isTyping && <div className="typing">thinking...</div>}
                 </div>
             </div>

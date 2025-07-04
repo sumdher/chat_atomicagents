@@ -204,7 +204,48 @@ class Session:
             await conn.execute('''
                 INSERT INTO chat_messages (session_id, role, content, created_at)
                 VALUES ($1, $2, $3, $4)
-            ''', self.session_id, role, content, datetime.utcnow())
+            ''', self.session_id, role, content, datetime.now())
+            
+    async def truncate_history(self, reset_index: int):
+        """Truncate history to the specified index"""
+        # First, get the ordered message IDs
+        async with app.state.db_pool.acquire() as conn:
+            rows = await conn.fetch('''
+                SELECT id 
+                FROM chat_messages 
+                WHERE session_id = $1 
+                ORDER BY created_at
+            ''', self.session_id)
+            
+            if len(rows) <= reset_index + 1:
+                print(f"No messages to truncate for session {self.session_id}")
+                return
+            
+            # Get the ID to delete from
+            delete_from_id = rows[reset_index + 1]['id']
+            
+            # Delete messages after the specified index
+            await conn.execute('''
+                DELETE FROM chat_messages
+                WHERE session_id = $1 AND id >= $2
+            ''', self.session_id, delete_from_id)
+            print(f"Truncated history for session {self.session_id} at index {reset_index}")
+        
+        # Reload history to update agent memory
+        self.memory = AgentMemory()
+        await self.load_history()
+        
+        # Reinitialize agent with updated history
+        if self.provider and self.model:
+            client = self.setup_client(self.provider, self.model)
+            self.agent = BaseAgent(
+                config=BaseAgentConfig(
+                    client=client,
+                    model=self.model,
+                    memory=self.memory,
+                    model_api_parameters={"max_tokens": 2048},
+                )
+            )
     
     def setup_client(self, provider: str, model: str):
         provider = provider.lower()
@@ -316,6 +357,7 @@ async def websocket_endpoint(websocket: WebSocket):
             if msg_type == "init":
                 provider = message.get("provider")
                 model = message.get("model")
+                print(f"Received init for session {session_id} with provider {provider} and model {model}") 
                 if not session_id or not provider or not model:
                     await websocket.send_text(json.dumps({
                         "sessionId": session_id,
@@ -388,6 +430,36 @@ async def websocket_endpoint(websocket: WebSocket):
                         }))
 
                 await stream()
+                
+            # NEW: Handle reset requests
+            elif msg_type == "reset":
+                if not session_id or session_id not in active_sessions:
+                    await websocket.send_text(json.dumps({
+                        "sessionId": session_id,
+                        "token": "[ERROR] Session not initialized or invalid"
+                    }))
+                    continue
+                
+                reset_index = message.get("resetToIndex")
+                if reset_index is None:
+                    await websocket.send_text(json.dumps({
+                        "sessionId": session_id,
+                        "token": "[ERROR] Missing reset index"
+                    }))
+                    continue
+                
+                try:
+                    session = active_sessions[session_id]
+                    await session.truncate_history(reset_index)
+                    await websocket.send_text(json.dumps({
+                        "sessionId": session_id,
+                        "type": "reset_ack"
+                    }))
+                except Exception as e:
+                    await websocket.send_text(json.dumps({
+                        "sessionId": session_id,
+                        "token": f"[ERROR] Reset failed: {str(e)}"
+                    }))
 
             elif msg_type == "stop":
                 if not session_id or session_id not in active_sessions:

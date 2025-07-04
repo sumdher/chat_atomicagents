@@ -81,7 +81,13 @@ const PROVIDER_MODELS = {
       id: 'gpt-4-turbo',
       name: 'GPT-4 Turbo',
       description:
-        'Earlier GPT-4 model with good reasoning performance and multimodal support. Pricing: $5.00 / 1M input, $20.00 / 1M output tokens.'
+        'Earlier GPT-4 model with good reasoning performance and multimodal support. Pricing: $10.00 / 1M input, $30.00 / 1M output tokens.'
+    },
+    {
+      id: 'gpt-4o',
+      name: 'GPT-4o',
+      description:
+        '“Omni” - OpenAI\'s flagship multimodal model released May 2024 Twice as fast and 50% cheaper than GPT-4 Turbo. Pricing: $2.5 / 1M input, $10.00 / 1M output tokens.'
     },
     {
       id: 'gpt-4o-mini',
@@ -329,7 +335,13 @@ export default function App() {
     socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        const { sessionId, token } = data;
+        const { sessionId, token, type } = data;
+        
+        if (type === "reset_ack") {
+          console.log(`Session ${sessionId} reset acknowledged`);
+          return;
+        }
+        
         if (!sessionId) return;
 
         setSessions(prev => prev.map(session => {
@@ -437,6 +449,7 @@ export default function App() {
           type: "init",
           sessionId: id,
           provider: session.provider,
+          model: session.model,
         }));
         setSessions(prev => prev.map(session =>
           session.id === id
@@ -502,7 +515,39 @@ export default function App() {
     }
   };
 
-  // Update input text for active session
+  const editMessage = (index, newText) => {
+    setSessions(prev => prev.map(session => {
+      if (session.id === activeSessionId) {
+        const updatedMessages = [...session.messages];
+        updatedMessages[index] = {
+          ...updatedMessages[index],
+          text: newText
+        };
+        return {
+          ...session,
+          messages: updatedMessages.slice(0, index + 1),
+          isTyping: false
+        };
+      }
+      return session;
+    }));
+    
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({
+        type: "reset",
+        sessionId: activeSessionId,
+        resetToIndex: index
+      }));
+
+      // Resend the edited message
+      socketRef.current.send(JSON.stringify({
+        type: "message",
+        sessionId: activeSessionId,
+        text: newText,
+      }));
+    }
+  };
+
   const setInput = (value) => {
     setSessions(prev => prev.map(session =>
       session.id === activeSessionId
@@ -580,6 +625,7 @@ export default function App() {
               messages={activeSession.messages}
               isTyping={activeSession.isTyping}
               isLoadingContext={activeSession.isLoadingContext}
+              onEditMessage={editMessage}
             />
             <InputArea
               input={activeSession.input}
