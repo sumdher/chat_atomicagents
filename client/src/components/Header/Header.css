@@ -30,9 +30,14 @@
 }
 
 .expand-btn:hover {
-  transform: scale(1.5);
+  transform: scale(1.1);
 }
 
+.expand-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  transition: transform 0.3s ease;
+}
 
 .api-keys-btn {
   position: absolute;

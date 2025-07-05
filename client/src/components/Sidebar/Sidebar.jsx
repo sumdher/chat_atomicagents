@@ -1,5 +1,6 @@
 // Sidebar.jsx
 import React, { useState } from "react";
+import collapseIcon from '../../assets/collapse.svg'
 import './Sidebar.css';
 
 export default function Sidebar({
@@ -18,7 +19,7 @@ export default function Sidebar({
       <div className="sidebar-header">
         <h2 className="sidebar-title">Any Chat</h2>
         <button className="collapse-btn" onClick={toggleCollapse}>
-          ←
+          <img src={collapseIcon} alt="collapse" className="collapse-icon" />
         </button>
       </div>
 

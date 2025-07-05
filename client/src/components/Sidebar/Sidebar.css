@@ -12,6 +12,12 @@
 
 }
 
+.collapse-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  transition: transform 0.3s ease;
+}
+
 .sidebar.collapsed {
   width: 0;
   padding: 0;
@@ -41,7 +47,7 @@
 }
 
 .collapse-btn:hover {
-  transform: scale(1.5);
+  transform: scale(1.1);
 }
 
 .sidebar-title {
