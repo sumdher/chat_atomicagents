@@ -4,7 +4,10 @@ import Sidebar from "./components/Sidebar/Sidebar";
 import Header from "./components/Header/Header";
 import ChatArea from "./components/ChatArea/ChatArea";
 import InputArea from "./components/InputArea/InputArea";
+import ApiKeysModal from "./components/ApiKeysModal/ApiKeysModal";
 import './App.css';
+
+
 
 const PROVIDER_MODELS = {
   openai: [
@@ -161,9 +164,79 @@ export default function App() {
   const [activeSessionId, setActiveSessionId] = useState(null);
   const socketRef = useRef(null);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [apiKeys, setApiKeys] = useState({});
+  const [showApiKeysModal, setShowApiKeysModal] = useState(false);
 
   const toggleSidebar = () => {
     setIsSidebarCollapsed(!isSidebarCollapsed);
+  };
+
+  useEffect(() => {
+    const handleApiKeysMessage = (data) => {
+      if (data.type === 'api_keys') {
+        setApiKeys(data.keys);
+      } else if (data.type === 'set_api_key_ack') {
+        // Request updated keys after setting
+        if (socketRef.current?.readyState === WebSocket.OPEN) {
+          socketRef.current.send(JSON.stringify({ type: "get_api_keys" }));
+        }
+      }
+    };
+
+    const socket = socketRef.current;
+    if (socket) {
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+
+          // Handle API keys separately
+          if (data.type === 'api_keys' || data.type === 'set_api_key_ack') {
+            handleApiKeysMessage(data);
+            return;
+          }
+
+          // ... existing message handling code ...
+        } catch (e) {
+          console.error("Error parsing WS message", e);
+        }
+      };
+    }
+  }, [sessions, activeSessionId]);
+
+  // Request API keys on initial connection
+  useEffect(() => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ type: "get_api_keys" }));
+    }
+  }, []);
+
+  // Request API keys when modal is opened
+  useEffect(() => {
+    if (showApiKeysModal && socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({ type: "get_api_keys" }));
+    }
+  }, [showApiKeysModal]);
+
+  // Add new API key handler
+  const handleAddApiKey = (provider, key) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({
+        type: "set_api_key",
+        provider,
+        key
+      }));
+    }
+  };
+
+  // Delete API key handler
+  const handleDeleteApiKey = (provider) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify({
+        type: "set_api_key",
+        provider,
+        key: ""
+      }));
+    }
   };
 
   const selectModelAndConnect = (modelId) => {
@@ -553,7 +626,16 @@ export default function App() {
           title={headerTitle}
           isSidebarCollapsed={isSidebarCollapsed}
           toggleSidebar={toggleSidebar}
+          onApiKeysClick={() => setShowApiKeysModal(true)}
         />
+        {showApiKeysModal && (
+          <ApiKeysModal
+            apiKeys={apiKeys}
+            onClose={() => setShowApiKeysModal(false)}
+            onAddKey={handleAddApiKey}
+            onDeleteKey={handleDeleteApiKey}
+          />
+        )}
         {!activeSession.isConnected && !activeSession.hasBeenConnected ? (
           <div className="connect-screen">
             <div className="provider-selection">

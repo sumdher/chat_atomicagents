@@ -1,11 +1,12 @@
 // Header.jsx
-import React from "react";
+import React from 'react';
 import './Header.css';
 
 export default function Header({
     title,
     isSidebarCollapsed,
-    toggleSidebar
+    toggleSidebar,
+    onApiKeysClick // Add this prop
 }) {
     return (
         <header className="header">
@@ -15,6 +16,12 @@ export default function Header({
                 </button>
             )}
             <h1 className="header-title">{title || ''}</h1>
+            <button
+                className="api-keys-btn"
+                onClick={onApiKeysClick}
+            >
+                API Keys
+            </button>
         </header>
     );
 }

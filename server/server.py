@@ -18,19 +18,61 @@ import asyncpg
 from datetime import datetime
 from contextlib import asynccontextmanager
 
-dotenv.load_dotenv()
+ENVS: Dict[str, str | None] = {}
+DB = False
 
-DATABASE_URL=os.getenv("DATABASE_URL")
-DB_CONTAINER_NAME = "chat-app-db"
+if dotenv.find_dotenv():
+    dotenv.load_dotenv()
+    DOTENV_PATH = dotenv.find_dotenv()
+    ENVS = dotenv.dotenv_values()
+    # add-feature: send the list of env keys to front end client. (ENVS dictionary's keys)
+else:
+    # add-feature: tell frontend client that no env vars are set. type: WARN
+    pass
 
-if not DATABASE_URL:
-    raise ValueError("DATABASE_URL environment variable not set")
+DOTENV_PATH = dotenv.find_dotenv()
+PROVIDER_ENV_MAP = {
+    "openai": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "groq": "GROQ_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+}
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(BASE_DIR, "chat_db")
+async def set_api_key(provider: str, key: str):
+    """Set API key in environment and .env file"""
+    # env_var = PROVIDER_ENV_MAP.get(provider.lower())
+    # if not env_var:
+    #     return False
+    
+    # Set in current environment
+    os.environ[provider] = key
+    
+    # Update .env file if exists
+    if DOTENV_PATH:
+        dotenv.set_key(DOTENV_PATH, provider, key)
+    
+    return True
 
-# os.makedirs(os.path.join(DATA_DIR, "postgres-data"), exist_ok=True)
-os.makedirs(os.path.join(DATA_DIR, "user_files"), exist_ok=True)
+# Add this function to get current API keys
+def get_api_keys():
+    """Get current API keys from environment"""
+    dotenv.load_dotenv()
+    ENVS = dotenv.dotenv_values()
+    return {k: v for k, v in dict(ENVS).items()}
+
+
+if os.getenv("DATABASE_URL") is not None:
+    DATABASE_URL = os.getenv("DATABASE_URL")
+    DB_CONTAINER_NAME = "chat-app-db"
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    DATA_DIR = os.path.join(BASE_DIR, "chat_db")
+    DB = True
+    os.makedirs(os.path.join(DATA_DIR, "user_files"), exist_ok=True)
+else:
+    # add-feature: tell frontend client that DB env var is not set and chats will not be persistent. type: WARN
+    pass
 
 def start_database():
     """Start the PostgreSQL Docker container if not running"""
@@ -97,7 +139,10 @@ async def lifespan(app: FastAPI):
     print("❌ Database connection closed")
     await stop_database()
 
-app = FastAPI(lifespan=lifespan)
+if DB:
+    app = FastAPI(lifespan=lifespan)
+else:
+    app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
@@ -107,9 +152,8 @@ app.add_middleware(
 )
 
 sessions: Dict[str, 'Session'] = {}
-UPLOAD_DIR = os.path.join(DATA_DIR, "user_files")
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-file_map: Dict[str, str] = {}  # {file_key: original_name}
+# UPLOAD_DIR = os.path.join(DATA_DIR, "user_files")
+# os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 class Session:
     def __init__(self, session_id: str):
@@ -130,19 +174,21 @@ class Session:
         
         self.provider = provider
         self.model = model  # Store model
-        client = self.setup_client(self.provider, self.model)
+        client = self.setup_client(self.provider)
         
-        async with app.state.db_pool.acquire() as conn:
-            await conn.execute('''
-                INSERT INTO chat_sessions (id, provider, model, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5)
-                ON CONFLICT (id) DO UPDATE
-                SET provider = EXCLUDED.provider,
-                    model = EXCLUDED.model,
-                    updated_at = EXCLUDED.updated_at
-            ''', self.session_id, self.provider, self.model, datetime.now(), datetime.now())
+        if DB:
+            async with app.state.db_pool.acquire() as conn:
+                await conn.execute('''
+                    INSERT INTO chat_sessions (id, provider, model, created_at, updated_at)
+                    VALUES ($1, $2, $3, $4, $5)
+                    ON CONFLICT (id) DO UPDATE
+                    SET provider = EXCLUDED.provider,
+                        model = EXCLUDED.model,
+                        updated_at = EXCLUDED.updated_at
+                ''', self.session_id, self.provider, self.model, datetime.now(), datetime.now())
+                
         
-        if not self.history_loaded:
+        if DB and not self.history_loaded:
             await self.load_history()
             self.history_loaded = True
         
@@ -164,7 +210,8 @@ class Session:
             initial_message = "Hello! How can I assist you today?"
             initial_schema = BaseAgentOutputSchema(chat_message=initial_message)
             self.memory.add_message("assistant", content=initial_schema)
-            await self.save_message("assistant", initial_message)
+            if DB:
+                await self.save_message("assistant", initial_message)
         
         self.agent = BaseAgent(
             config=BaseAgentConfig(
@@ -247,59 +294,60 @@ class Session:
                 )
             )
     
-    def setup_client(self, provider: str, model: str):
+    def setup_client(self, provider: str):
         provider = provider.lower()
         
-        if provider == "openai":
-            import openai
-            from openai import AsyncOpenAI
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                raise ValueError("OPENAI_API_KEY environment variable not set")
+        if PROVIDER_ENV_MAP.get(provider.lower()):
+            if provider == "openai":
+                import openai
+                from openai import AsyncOpenAI
+                api_key = os.getenv("OPENAI_API_KEY")
+                if not api_key:
+                    raise ValueError("OPENAI_API_KEY environment variable not set")
+                    
+                client = instructor.from_openai(AsyncOpenAI(api_key=api_key))
+                return client
+
+            elif provider == "anthropic":
+                import anthropic
+                from anthropic import AsyncAnthropic
+                api_key = os.getenv("ANTHROPIC_API_KEY")
+                if not api_key:
+                    raise ValueError("ANTHROPIC_API_KEY environment variable not set")
+                    
+                client = instructor.from_anthropic(AsyncAnthropic(api_key=api_key))
+                return client
+
+            elif provider == "groq":
+                import groq
+                from groq import AsyncGroq
+                api_key = os.getenv("GROQ_API_KEY")
+                if not api_key:
+                    raise ValueError("GROQ_API_KEY environment variable not set")
+                    
+                client = instructor.from_groq(
+                    AsyncGroq(api_key=api_key),
+                    mode=instructor.Mode.JSON
+                )
+                return client
+
+            elif provider == "gemini":
+                from openai import OpenAI, AsyncOpenAI
+                # import google.generativeai as genai
+                # genai.configure(api_key=api_key)
                 
-            client = instructor.from_openai(AsyncOpenAI(api_key=api_key))
-            return client
+                api_key = os.getenv("GEMINI_API_KEY")
+                if not api_key:
+                    raise ValueError("GEMINI_API_KEY environment variable not set")
 
-        elif provider == "anthropic":
-            import anthropic
-            from anthropic import AsyncAnthropic
-            api_key = os.getenv("ANTHROPIC_API_KEY")
-            if not api_key:
-                raise ValueError("ANTHROPIC_API_KEY environment variable not set")
-                
-            client = instructor.from_anthropic(AsyncAnthropic(api_key=api_key))
-            return client
-
-        elif provider == "groq":
-            import groq
-            from groq import AsyncGroq
-            api_key = os.getenv("GROQ_API_KEY")
-            if not api_key:
-                raise ValueError("GROQ_API_KEY environment variable not set")
-                
-            client = instructor.from_groq(
-                AsyncGroq(api_key=api_key),
-                mode=instructor.Mode.JSON
-            )
-            return client
-
-        elif provider == "gemini":
-            from openai import OpenAI, AsyncOpenAI
-            # import google.generativeai as genai
-            # genai.configure(api_key=api_key)
-            
-            api_key = os.getenv("GEMINI_API_KEY")
-            if not api_key:
-                raise ValueError("GEMINI_API_KEY environment variable not set")
-
-            client = instructor.from_openai(
-                AsyncOpenAI(api_key=api_key, base_url="https://generativelanguage.googleapis.com/v1beta/openai/"),
-                mode=instructor.Mode.JSON,
-            )
-            return client
-
+                client = instructor.from_openai(
+                    AsyncOpenAI(api_key=api_key, base_url="https://generativelanguage.googleapis.com/v1beta/openai/"),
+                    mode=instructor.Mode.JSON,
+                )
+                return client
         else:
-            raise ValueError(f"Unsupported provider: {provider}")
+            # add-feature: tell frontend client that no env var set for the provider: WARN
+            raise ValueError(f"Provider env var not set: {provider}")
     
     async def stream_response(self, input_text: str) -> AsyncGenerator[str, None]:
         """Stream response only if agent is initialized"""
@@ -326,7 +374,8 @@ class Session:
             if full_response:
                 output_schema = BaseAgentOutputSchema(chat_message=full_response)
                 self.memory.add_message("assistant", content=output_schema)
-                await self.save_message("assistant", full_response)
+                if DB:
+                    await self.save_message("assistant", full_response)
                 
         except Exception as e:
             traceback.print_exc()
@@ -354,6 +403,41 @@ async def websocket_endpoint(websocket: WebSocket):
             msg_type = message.get("type")
             session_id = message.get("sessionId")
 
+            # Add API key management handlers
+            if msg_type == "get_api_keys":
+                api_keys = get_api_keys()
+                await websocket.send_text(json.dumps({
+                    "type": "api_keys",
+                    "keys": api_keys
+                }))
+                continue
+                
+            elif msg_type == "set_api_key":
+                provider = message.get("provider")
+                key = message.get("key")
+                
+                if not provider or not key:
+                    await websocket.send_text(json.dumps({
+                        "type": "error",
+                        "message": "Missing provider or key"
+                    }))
+                    continue
+                    
+                success = await set_api_key(provider, key)
+                if success:
+                    # Send updated keys
+                    api_keys = get_api_keys()
+                    await websocket.send_text(json.dumps({
+                        "type": "api_keys",
+                        "keys": api_keys
+                    }))
+                else:
+                    await websocket.send_text(json.dumps({
+                        "type": "error",
+                        "message": f"Invalid provider: {provider}"
+                    }))
+                continue
+
             if msg_type == "init":
                 provider = message.get("provider")
                 model = message.get("model")
@@ -377,11 +461,6 @@ async def websocket_endpoint(websocket: WebSocket):
                     print(f"Initialized agent for session {session_id} with provider {provider} and model {model}")
 
                     if  session.memory.get_message_count() > 0 and session.memory.history[-1].role == "assistant":
-                        last_message = session.memory.history[-1].content.chat_message
-                        # await websocket.send_text(json.dumps({
-                        #     "sessionId": session_id,
-                        #     "token": last_message
-                        # }))
                         await websocket.send_text(json.dumps({
                             "sessionId": session_id,
                             "token": "[[END]]"
@@ -409,7 +488,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     continue
 
                 session = active_sessions[session_id]
-                await session.save_message("user", text)
+                if DB:
+                    await session.save_message("user", text)
 
                 async def stream():
                     try:
@@ -431,7 +511,6 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 await stream()
                 
-            # NEW: Handle reset requests
             elif msg_type == "reset":
                 if not session_id or session_id not in active_sessions:
                     await websocket.send_text(json.dumps({
@@ -450,7 +529,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 
                 try:
                     session = active_sessions[session_id]
-                    await session.truncate_history(reset_index)
+                    if DB:
+                        await session.truncate_history(reset_index)
                     await websocket.send_text(json.dumps({
                         "sessionId": session_id,
                         "type": "reset_ack"
@@ -542,9 +622,12 @@ if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))
     reload_dirs = ["."]
     
-    chat_db_relative = os.path.relpath(DATA_DIR, current_dir)
-    reload_excludes = [os.path.join(chat_db_relative, '*')]
-    
+    if DB:
+        chat_db_relative = os.path.relpath(DATA_DIR, current_dir)
+        reload_excludes: List[str] = [os.path.join(chat_db_relative, '*')]
+    else:
+        reload_excludes = []
+        
     uvicorn.run(
         "server:app",
         host="0.0.0.0",
