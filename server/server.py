@@ -18,6 +18,7 @@ import asyncpg
 from datetime import datetime
 from contextlib import asynccontextmanager
 import signal
+from fastapi.responses import JSONResponse
 
 LOCAL_MODE = os.getenv("LOCAL") == "1"
 
@@ -408,6 +409,11 @@ class Session:
             traceback.print_exc()
             yield f"[ERROR] {str(e)}"
 
+@app.get("/health")
+async def health_check():
+    return JSONResponse(content={"status": "ok", "timestamp": datetime.utcnow().isoformat() + "Z"})
+
+
 @app.websocket("/ws/chat")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -670,3 +676,4 @@ if __name__ == "__main__":
         reload_dirs=reload_dirs,
         reload_excludes=reload_excludes
     )
+    
