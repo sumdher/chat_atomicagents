@@ -14,14 +14,27 @@ cleanup() {
     wait $server_pid 2>/dev/null
     echo
     echo -e "(bash) ${MAGENTA}${BOLD}All processes stopped${NC}"
+    echo
 }
 
 trap cleanup EXIT
 
+LOCAL_MODE=0
+if [[ "$1" == "local" ]]; then
+    LOCAL_MODE=1
+fi
+
 # backend server
 echo -e "(bash) ${MAGENTA}${BOLD}Starting backend server...${NC}"
 cd server
-python server.py &
+
+if [[ $LOCAL_MODE -eq 1 ]]; then
+    echo "(bash) ${MAGENTA}(with Docker DB)${NC}"
+    LOCAL=1 python server.py &
+else
+    unset LOCAL
+    python server.py &
+fi
 server_pid=$!
 
 sleep 11

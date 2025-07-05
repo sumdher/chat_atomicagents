@@ -17,24 +17,41 @@ import traceback
 import asyncpg
 from datetime import datetime
 from contextlib import asynccontextmanager
+import signal
+
+LOCAL_MODE = os.getenv("LOCAL") == "1"
 
 ENVS: Dict[str, str | None] = {}
 DB = False
+DATABASE_URL = None
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "chat_db")
+DOTENV_PATH = None
 
-if dotenv.find_dotenv():
-    dotenv.load_dotenv()
-    DOTENV_PATH = dotenv.find_dotenv()
-    ENVS = dotenv.dotenv_values()
-    # add-feature: send the list of env keys to front end client. (ENVS dictionary's keys)
+if LOCAL_MODE:
+    DB_CONTAINER_NAME = "chat-app-db"
+    os.makedirs(os.path.join(DATA_DIR, "user_files"), exist_ok=True)
+    
+    if dotenv.find_dotenv():
+        dotenv.load_dotenv()
+        DOTENV_PATH = dotenv.find_dotenv()
+        ENVS = dotenv.dotenv_values()
+        # add-feature: send the list of env keys to front end client. (ENVS dictionary's keys)
+    else:
+        # add-feature: tell frontend client that no env vars are set. type: WARN
+        pass
 else:
-    # add-feature: tell frontend client that no env vars are set. type: WARN
-    pass
+    ENVS = os.environ
 
-DOTENV_PATH = dotenv.find_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL")
+if DATABASE_URL:
+    DB = True
+else:
+    pass
+    print("⚠️ DATABASE_URL not set. Chat history will not be persistent.")
+
 PROVIDER_ENV_MAP = {
     "openai": "OPENAI_API_KEY",
-    "anthropic": "ANTHROPIC_API_KEY",
-    "gemini": "GEMINI_API_KEY",
     "groq": "GROQ_API_KEY",
     "gemini": "GEMINI_API_KEY",
     "anthropic": "ANTHROPIC_API_KEY",
@@ -42,64 +59,67 @@ PROVIDER_ENV_MAP = {
 
 async def set_api_key(provider: str, key: str):
     """Set API key in environment and .env file"""
-    # env_var = PROVIDER_ENV_MAP.get(provider.lower())
-    # if not env_var:
-    #     return False
+    env_var = PROVIDER_ENV_MAP.get(provider.lower())
+    if not env_var:
+        env_var = provider
     
-    # Set in current environment
-    os.environ[provider] = key
+    os.environ[env_var] = key
     
-    # Update .env file if exists
-    if DOTENV_PATH:
-        dotenv.set_key(DOTENV_PATH, provider, key)
-    
-    return True
+    if LOCAL_MODE:
+        if DOTENV_PATH:
+            dotenv.set_key(DOTENV_PATH, env_var, key)
+        return True
+    else:
+        async with app.state.db_pool.acquire() as conn:
+            await conn.execute(
+                """
+                INSERT INTO llm_api_keys(provider, env_var, api_key)
+                VALUES ($1, $2, $3)
+                ON CONFLICT (provider) DO UPDATE
+                SET api_key = EXCLUDED.api_key
+                """,
+                provider.lower(), env_var, key,
+            )
+        return True
 
-# Add this function to get current API keys
+async def load_keys_from_db(pool):
+    async with pool.acquire() as conn:
+        rows = await conn.fetch("SELECT env_var, api_key FROM llm_api_keys")
+        for row in rows:
+            os.environ[row["env_var"]] = row["api_key"]
+
 def get_api_keys():
     """Get current API keys from environment"""
-    dotenv.load_dotenv()
-    ENVS = dotenv.dotenv_values()
-    return {k: v for k, v in dict(ENVS).items()}
-
-
-if os.getenv("DATABASE_URL") is not None:
-    DATABASE_URL = os.getenv("DATABASE_URL")
-    DB_CONTAINER_NAME = "chat-app-db"
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-    DATA_DIR = os.path.join(BASE_DIR, "chat_db")
-    DB = True
-    os.makedirs(os.path.join(DATA_DIR, "user_files"), exist_ok=True)
-else:
-    # add-feature: tell frontend client that DB env var is not set and chats will not be persistent. type: WARN
-    pass
+    if LOCAL_MODE and DOTENV_PATH:
+        dotenv.load_dotenv(DOTENV_PATH)
+        envs = dotenv.dotenv_values(DOTENV_PATH)
+    else:
+        envs = os.environ
+    return {k: v for k, v in dict(envs).items()}
 
 def start_database():
-    """Start the PostgreSQL Docker container if not running"""
+    if not LOCAL_MODE:
+        return  # No-op in production
+
     try:
         subprocess.run(["docker", "--version"], check=True,
-                      stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-        if sys.platform == "win32":
-            script_path = os.path.join(DATA_DIR, "docker-db.bat")
-            if os.path.exists(script_path):
-                subprocess.run(["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", script_path], check=True, shell=True)
-                print("✅ PostgreSQL container started successfully")
-            else:
-                print(f"⚠ docker-db.ps1 not found at {script_path}. Using existing DB connection.")
+        script_name = "docker-db.bat" if sys.platform == "win32" else "docker-db.sh"
+        script_path = os.path.join(DATA_DIR, script_name)
+
+        if os.path.exists(script_path):
+            subprocess.run(["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", script_path] if sys.platform == "win32" else ["bash", script_path], check=True)
+            print("✅ PostgreSQL container started successfully")
         else:
-            script_path = os.path.join(DATA_DIR, "docker-db.sh")
-            if os.path.exists(script_path):
-                subprocess.run(["bash", script_path], check=True)
-                print("✅ PostgreSQL container started successfully")
-            else:
-                print(f"⚠ docker-db.sh not found at {script_path}. Using existing DB connection.")
-                
+            print(f"⚠ Script not found at {script_path}. Using existing DB connection.")
     except (subprocess.CalledProcessError, FileNotFoundError) as e:
         print(f"❌ Docker error: {str(e)}. Using existing database connection.")
 
 async def stop_database():
-    """Stop the PostgreSQL Docker container if running"""
+    if not LOCAL_MODE:
+        return  # No-op in production
+
     try:
         process = await asyncio.create_subprocess_exec(
             "docker", "stop", DB_CONTAINER_NAME,
@@ -120,24 +140,32 @@ async def stop_database():
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    start_database()
-    await asyncio.sleep(2)
+    if LOCAL_MODE:
+        start_database()
+        await asyncio.sleep(2)
     
-    app.state.db_pool = await asyncpg.create_pool(
-        DATABASE_URL, 
-        min_size=5, 
-        max_size=20,
-        command_timeout=60
-    )
+    if DB:    
+        app.state.db_pool = await asyncpg.create_pool(
+            DATABASE_URL, 
+            min_size=5, 
+            max_size=20,
+            command_timeout=60
+        )
+        await init_db(app.state.db_pool)
     
-    await init_db(app.state.db_pool)
+    if not LOCAL_MODE:
+        await load_keys_from_db(app.state.db_pool)
+
     print("✅ Database connected and initialized")
     
     yield
     
-    await app.state.db_pool.close()
-    print("❌ Database connection closed")
-    await stop_database()
+    if DB and hasattr(app.state, "db_pool"):
+        await app.state.db_pool.close()
+        print("❌ Database connection closed")
+    
+    if LOCAL_MODE:
+        await stop_database()
 
 if DB:
     app = FastAPI(lifespan=lifespan)
@@ -152,7 +180,6 @@ app.add_middleware(
 )
 
 sessions: Dict[str, 'Session'] = {}
-# UPLOAD_DIR = os.path.join(DATA_DIR, "user_files")
 # os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 class Session:
@@ -169,7 +196,7 @@ class Session:
     async def initialize_agent(self, provider: str, model: str):
         """Initialize agent after provider is known"""
         
-        if self.agent and self.provider == provider:
+        if self.agent and self.provider == provider and self.model == model:
             return  
         
         self.provider = provider
@@ -284,7 +311,7 @@ class Session:
         
         # Reinitialize agent with updated history
         if self.provider and self.model:
-            client = self.setup_client(self.provider, self.model)
+            client = self.setup_client(self.provider)
             self.agent = BaseAgent(
                 config=BaseAgentConfig(
                     client=client,
@@ -567,24 +594,17 @@ async def websocket_endpoint(websocket: WebSocket):
         traceback.print_exc()
         await websocket.close(code=1011)
 
-async def stream_to_websocket(session: Session, websocket: WebSocket, input_text: str):
-    try:
-        async for token in session.stream_response(input_text):
-            await websocket.send_text(token)
-    except asyncio.CancelledError:
-        print("Generation cancelled")
-        pass
-    except Exception as e:
-        error_msg = f"Stream error: {str(e)}"
-        print(error_msg)
-        traceback.print_exc()
-        await websocket.send_text(f"[ERROR] {error_msg}")
-    finally:
-        await websocket.send_text("[[END]]")
-
 async def init_db(pool):
     try:
         async with pool.acquire() as conn:
+            await conn.execute('''
+                CREATE TABLE IF NOT EXISTS llm_api_keys (
+                    provider TEXT PRIMARY KEY,
+                    env_var  TEXT NOT NULL,
+                    api_key  TEXT NOT NULL
+                )
+            ''')
+            
             await conn.execute('''
                 CREATE TABLE IF NOT EXISTS chat_sessions (
                     id TEXT PRIMARY KEY,
@@ -628,19 +648,25 @@ if __name__ == "__main__":
     else:
         reload_excludes = []
         
+    def handle_exit_signal():
+        print("⚠️ Received shutdown signal, cleaning up...")
+        loop = asyncio.get_event_loop()
+        if DB and hasattr(app.state, "db_pool"):
+            loop.run_until_complete(app.state.db_pool.close())
+        if LOCAL_MODE:
+            loop.run_until_complete(stop_database())
+        print("✅ Clean shutdown complete")
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, lambda sig, frame: handle_exit_signal())
+    signal.signal(signal.SIGTERM, lambda sig, frame: handle_exit_signal())
+
     uvicorn.run(
         "server:app",
         host="0.0.0.0",
         port=4580,
         ws="websockets",
-        reload=True,
+        reload=LOCAL_MODE,
         reload_dirs=reload_dirs,
         reload_excludes=reload_excludes
     )
-    
-    #     uvicorn.run(
-    #     "server:app",
-    #     host="0.0.0.0",
-    #     port=4580,
-    #     ws="websockets",
-    # )
