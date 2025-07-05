@@ -311,9 +311,10 @@ export default function App() {
   }, [sessions.find(s => s.id === activeSessionId)?.messages]);
 
   useEffect(() => {
-    const socket = new WebSocket("ws://127.0.0.1:4580/ws/chat");
-    // const API_URL = import.meta.env.VITE_API || "http://127.0.0.1:4580";
-    // const socket = new WebSocket(`ws://${API_URL.replace(/^http/, "ws")}/ws/chat`);
+    // const socket_ = new WebSocket("ws://127.0.0.1:4580/ws/chat");
+    const wsUrl = import.meta.env.VITE_WS_URL || "ws://localhost:4580/ws/chat";
+    const socket = new WebSocket(wsUrl);
+    
     socketRef.current = socket;
 
     socket.onopen = () => {
