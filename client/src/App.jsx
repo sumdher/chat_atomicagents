@@ -171,38 +171,6 @@ export default function App() {
     setIsSidebarCollapsed(!isSidebarCollapsed);
   };
 
-  useEffect(() => {
-    const handleApiKeysMessage = (data) => {
-      if (data.type === 'api_keys') {
-        setApiKeys(data.keys);
-      } else if (data.type === 'set_api_key_ack') {
-        // Request updated keys after setting
-        if (socketRef.current?.readyState === WebSocket.OPEN) {
-          socketRef.current.send(JSON.stringify({ type: "get_api_keys" }));
-        }
-      }
-    };
-
-    const socket = socketRef.current;
-    if (socket) {
-      socket.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-
-          // Handle API keys separately
-          if (data.type === 'api_keys' || data.type === 'set_api_key_ack') {
-            handleApiKeysMessage(data);
-            return;
-          }
-
-          // ... existing message handling code ...
-        } catch (e) {
-          console.error("Error parsing WS message", e);
-        }
-      };
-    }
-  }, [sessions, activeSessionId]);
-
   // Request API keys on initial connection
   useEffect(() => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
@@ -271,8 +239,6 @@ export default function App() {
     const model = providerModels.find(m => m.id === session.model);
     return model ? model.name : null;
   };
-
-
 
   useEffect(() => {
     const savedSessions = localStorage.getItem('chat_sessions');
@@ -344,9 +310,10 @@ export default function App() {
     }));
   }, [sessions.find(s => s.id === activeSessionId)?.messages]);
 
-  // Open one persistent WebSocket on app mount
   useEffect(() => {
     const socket = new WebSocket("ws://127.0.0.1:4580/ws/chat");
+    // const API_URL = import.meta.env.VITE_API || "http://127.0.0.1:4580";
+    // const socket = new WebSocket(`ws://${API_URL.replace(/^http/, "ws")}/ws/chat`);
     socketRef.current = socket;
 
     socket.onopen = () => {
@@ -373,6 +340,20 @@ export default function App() {
     socket.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+
+        // ===== ADDED: Handle API keys messages =====
+        if (data.type === 'api_keys') {
+          setApiKeys(data.keys);
+          return;
+        } else if (data.type === 'set_api_key_ack') {
+          // Request updated keys after setting
+          if (socketRef.current?.readyState === WebSocket.OPEN) {
+            socketRef.current.send(JSON.stringify({ type: "get_api_keys" }));
+          }
+          return;
+        }
+        // ===== END ADDED SECTION =====
+
         const { sessionId, token, type } = data;
 
         if (type === "reset_ack") {
@@ -431,8 +412,10 @@ export default function App() {
       }
     };
 
-    socket.onclose = () => {
-      console.log("❌ WebSocket closed");
+    socket.onclose = (e) => {
+      console.log("❌ WebSocket closed", "code:", e.code,
+        "reason:", e.reason || "(no reason)",
+        "wasClean:", e.wasClean);
       setSessions(prev => prev.map(session => ({
         ...session,
         isConnected: false,
@@ -441,8 +424,8 @@ export default function App() {
       })));
     };
 
-    socket.onerror = (error) => {
-      console.error("WebSocket error", error);
+    socket.onerror = (e) => {
+      console.error("WS error 👎 (readyState:", socket.readyState, ")", e);
     };
 
     return () => {

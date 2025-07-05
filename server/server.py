@@ -560,8 +560,8 @@ async def websocket_endpoint(websocket: WebSocket):
                     "token": "[ERROR] Unknown message type"
                 }))
 
-    except WebSocketDisconnect:
-        print("Client disconnected")
+    except WebSocketDisconnect as wse:
+        print(f"Client disconnected: {str(wse)}")
     except Exception as e:
         print(f"WebSocket error: {str(e)}")
         traceback.print_exc()
@@ -637,3 +637,10 @@ if __name__ == "__main__":
         reload_dirs=reload_dirs,
         reload_excludes=reload_excludes
     )
+    
+    #     uvicorn.run(
+    #     "server:app",
+    #     host="0.0.0.0",
+    #     port=4580,
+    #     ws="websockets",
+    # )

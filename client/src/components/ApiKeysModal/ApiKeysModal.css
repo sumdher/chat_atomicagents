@@ -159,14 +159,29 @@
   }
   
   .form-actions button:first-child {
-    background: var(--primary-color);
-    color: var(--surface);
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--border-color);
+    transition: all 0.2s ease;
   }
   
   .form-actions button:last-child {
     background: transparent;
-    color: var(--text-secondary);
+    color: rgb(207, 207, 207);
     border: 1px solid var(--border-color);
+    transition: all 0.2s ease;
+  }
+
+  .form-actions button:first-child:hover {
+    opacity: 1;
+    color: var(--accent);
+    border-color: var(--accent);
+  }
+
+  .form-actions button:last-child:hover {
+    opacity: 1;
+    color: var(--accent);
+    border-color: white;
   }
   
   .error {

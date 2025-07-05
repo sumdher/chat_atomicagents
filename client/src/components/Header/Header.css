@@ -42,14 +42,13 @@
 .api-keys-btn {
   position: absolute;
   right: 1.5rem;
-  background: var(--background-dark);
+  background: transparent;
   color: var(--surface);
   border: none;
   font-size: 0.9rem;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.2s ease;
-  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
 }
 
 .api-keys-btn:hover {
