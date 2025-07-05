@@ -171,21 +171,18 @@ export default function App() {
     setIsSidebarCollapsed(!isSidebarCollapsed);
   };
 
-  // Request API keys on initial connection
   useEffect(() => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ type: "get_api_keys" }));
     }
   }, []);
 
-  // Request API keys when modal is opened
   useEffect(() => {
     if (showApiKeysModal && socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({ type: "get_api_keys" }));
     }
   }, [showApiKeysModal]);
 
-  // Add new API key handler
   const handleAddApiKey = (provider, key) => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({
@@ -196,7 +193,6 @@ export default function App() {
     }
   };
 
-  // Delete API key handler
   const handleDeleteApiKey = (provider) => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({
@@ -276,7 +272,6 @@ export default function App() {
     setIsInitialized(true);
   }, []);
 
-  // Save sessions & activeSessionId to localStorage on change
   useEffect(() => {
     if (!isInitialized) return;
 
@@ -294,7 +289,6 @@ export default function App() {
     localStorage.setItem('active_session_id', activeSessionId);
   }, [sessions, activeSessionId, isInitialized]);
 
-  // Update session title from first user message
   useEffect(() => {
     setSessions(prev => prev.map(session => {
       if (session.id === activeSessionId && session.messages.length > 0) {
@@ -319,7 +313,6 @@ export default function App() {
 
     socket.onopen = () => {
       console.log("✅ WebSocket connected");
-      // Initialize currently active session on connect
       if (activeSessionId) {
         const activeSession = sessions.find(s => s.id === activeSessionId);
         if (activeSession) {
@@ -389,7 +382,6 @@ export default function App() {
             return { ...session, isTyping: false, isConnected: false, isConnecting: false };
           }
 
-          // Append or create bot message
           const lastMsg = session.messages[session.messages.length - 1];
           let newMessages = [...session.messages];
           if (lastMsg?.from === "bot") {
@@ -521,7 +513,6 @@ export default function App() {
     }));
   };
 
-  // Stop AI generation for active session
   const stopAI = () => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({
@@ -561,7 +552,6 @@ export default function App() {
         resetToIndex: index
       }));
 
-      // Resend the edited message
       socketRef.current.send(JSON.stringify({
         type: "message",
         sessionId: activeSessionId,
