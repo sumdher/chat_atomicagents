@@ -20,7 +20,11 @@ from contextlib import asynccontextmanager
 import signal
 from fastapi.responses import JSONResponse
 
-LOCAL_MODE = os.getenv("LOCAL") == "1"
+# LOCAL_MODE = os.getenv("LOCAL") == "1"
+LOCAL_MODE = "local" in sys.argv or "--local" in sys.argv
+
+if LOCAL_MODE:
+    os.environ["LOCAL"] = "1"
 
 ENVS: Dict[str, str | None] = {}
 DB = False
