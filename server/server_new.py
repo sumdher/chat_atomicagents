@@ -150,6 +150,35 @@ else:
 
 sessions: Dict[str, Session] = {}
 
+# @app.on_event("startup")
+# async def on_startup() -> None:
+#     if LOCAL_MODE:
+#         _start_local_postgres()
+#         await asyncio.sleep(2)
+
+#     if DB:
+#         app.state.db_pool = await asyncpg.create_pool(
+#             DATABASE_URL, min_size=5, max_size=20, command_timeout=60
+#         )
+#         await _init_db(app.state.db_pool)
+
+#         # In production, preload persisted API keys into env for LLM access
+#         if not LOCAL_MODE:
+#             await _load_keys_from_db(app.state.db_pool)
+
+#         print("✅ Database connected & initialised")
+
+
+# @app.on_event("shutdown")
+# async def on_shutdown() -> None:
+#     if DB and hasattr(app.state, "db_pool"):
+#         await app.state.db_pool.close()
+#         print("❌ Database pool closed")
+
+#     if LOCAL_MODE:
+#         await _stop_local_postgres()
+
+
 # CORS (very open – tighten for production if needed) ------------------------
 app.add_middleware(
     CORSMiddleware,
@@ -1022,11 +1051,10 @@ if __name__ == "__main__":
     signal.signal(signal.SIGTERM, lambda sig, frame: handle_exit_signal())
 
     uvicorn.run(
-        "server:app",
+        "server_new:app",
         host="0.0.0.0",
         port=4580,
         ws="websockets",
-        log_level="debug",
         reload=LOCAL_MODE,
         reload_dirs=reload_dirs,
         reload_excludes=reload_excludes
