@@ -5,6 +5,7 @@ import json
 import os
 import secrets
 import subprocess
+from subprocess import CalledProcessError
 import sys
 import traceback
 import uuid
@@ -142,7 +143,7 @@ async def lifespan(app: FastAPI):
     
     if LOCAL_MODE:
         await _stop_local_postgres()
-        
+
 if DB:
     app = FastAPI(lifespan=lifespan)
 else:
@@ -165,38 +166,70 @@ app.add_middleware(
 def _start_local_postgres() -> None:
     """Launch the docker compose / shell script that starts Postgres locally."""
 
-    script = "docker-db.bat" if sys.platform == "win32" else "docker-db.sh"
-    script_path = os.path.join(DATA_DIR, script)
-    if not os.path.exists(script_path):
-        print(f"⚠️ Local DB script not found: {script_path}")
-        return
-
     try:
-        subprocess.run(
-            ["bash", script_path] if sys.platform != "win32" else ["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", script_path],
-            check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        print("✅ Local PostgreSQL container started")
-    except subprocess.CalledProcessError as exc:
-        print(f"❌ Failed to start local Postgres: {exc}")
+        subprocess.run(["docker", "--version"], check=True,
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)    
+
+        script = "docker-db.ps1" if sys.platform == "win32" else "docker-db.sh"
+        script_path = os.path.join(DATA_DIR, script)
+        if not os.path.exists(script_path):
+            print(f"⚠️ Local DB script not found: {script_path}")
+            return
+        try:
+            subprocess.run(
+                ["bash", script_path] if sys.platform != "win32" else ["powershell.exe", "-ExecutionPolicy", "Bypass", "-File", script_path],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            print("✅ Local PostgreSQL container started")
+            
+        except subprocess.CalledProcessError as exc:
+            print(f"❌ Failed to start local Postgres: {exc}")
+            
+    except (subprocess.CalledProcessError, FileNotFoundError) as e:
+        print(f"❌ Docker error: {str(e)}. Using existing database connection.")
 
 
 async def _stop_local_postgres() -> None:
-    try:
-        process = await asyncio.create_subprocess_exec(
-            "docker",
-            "stop",
-            "chat-app-db",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        await process.communicate()
-        if process.returncode == 0:
-            print("✅ Local PostgreSQL container stopped")
-    except FileNotFoundError:
-        pass  # Docker not installed – skip
+    if sys.platform == "win32":
+        try:
+            result = subprocess.run(
+                ["docker", "stop", DB_CONTAINER_NAME],
+                capture_output=True,
+                text=True
+            )
+            if result.returncode == 0:
+                print("✅ Local PostgreSQL container stopped")
+            else:
+                error_msg = result.stderr.strip()
+                if "No such container" in error_msg:
+                    print(f"⚠️ Container {DB_CONTAINER_NAME} not found")
+                else:
+                    print(f"⚠️ Could not stop container: {error_msg}")
+        except CalledProcessError as e:
+            print(e)
+        
+    else:
+        try:
+            process = await asyncio.create_subprocess_exec(
+                "docker",
+                "stop",
+                DB_CONTAINER_NAME,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await process.communicate()
+            if process.returncode == 0:
+                print("✅ Local PostgreSQL container stopped")
+            else:
+                error_msg = stderr.decode().strip()
+                if "No such container" in error_msg:
+                    print(f"⚠️ Container {DB_CONTAINER_NAME} not found")
+                else:
+                    print(f"⚠️ Could not stop container: {error_msg}")
+        except FileNotFoundError:
+            print("❌ Docker not installed, skipping container stop")
 
 
 async def _init_db(pool: asyncpg.pool.Pool) -> None:
@@ -832,7 +865,7 @@ class Session:
         except Exception as e:
             traceback.print_exc()
             yield f"[ERROR] {str(e)}"
-            
+
 @app.websocket("/ws/chat")
 async def ws_chat(websocket: WebSocket):
     token = websocket.query_params.get("token")
@@ -989,11 +1022,11 @@ async def ws_chat(websocket: WebSocket):
         print(f"WebSocket error: {str(e)}")
         traceback.print_exc()
         await websocket.close(code=1011, reason=str(e))
-        
+
 @app.get("/health")
 async def health() -> dict:
     return {"status": "ok", "timestamp": datetime.utcnow().isoformat() + "Z"}
-        
+
 if __name__ == "__main__":
     import uvicorn
     import signal
