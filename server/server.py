@@ -12,6 +12,8 @@ import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from typing import Annotated, AsyncGenerator, Dict, Optional, Set
+from google.oauth2 import id_token
+from google.auth.transport import requests
 
 import asyncpg
 import dotenv
@@ -64,7 +66,6 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 30
 
 # Database -------------------------------------------------------------------
 DATABASE_URL = os.getenv("DATABASE_URL")
-print(f"DATABASE_URL: {DATABASE_URL}")
 
 DB = bool(DATABASE_URL)
 if not DB:
@@ -151,10 +152,16 @@ else:
 
 sessions: Dict[str, Session] = {}
 
-# CORS (very open – tighten for production if needed) ------------------------
+origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://172.23.32.1:5173",
+    "http://192.168.8.172:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_methods=["*"],
     allow_headers=["*"],
     allow_credentials=True,
@@ -246,7 +253,6 @@ async def _init_db(pool: asyncpg.pool.Pool) -> None:
             CREATE TABLE IF NOT EXISTS users (
                 id TEXT PRIMARY KEY,
                 email TEXT UNIQUE NOT NULL,
-                hashed_password TEXT NOT NULL,
                 name TEXT NOT NULL,
                 picture TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -365,7 +371,6 @@ CurrentUser = Annotated[User, Depends(get_current_user)]
 # ---------------------------------------------------------------------------
 # Auth endpoints -------------------------------------------------------------
 # ---------------------------------------------------------------------------
-
 COOKIE_PARAMS = dict(
     httponly=True,
     max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
@@ -398,23 +403,14 @@ async def register(form_data: OAuth2PasswordRequestForm = Depends()) -> JSONResp
     return resp
 
 
-@app.post("/auth/token")
-async def login(form_data: OAuth2PasswordRequestForm = Depends()) -> JSONResponse:
-    async with app.state.db_pool.acquire() as conn:
-        row = await conn.fetchrow(
-            "SELECT id, hashed_password FROM users WHERE email = $1", form_data.username
-        )
-        if not row or not verify_password(form_data.password, row["hashed_password"]):
-            raise HTTPException(status_code=401, detail="Incorrect credentials")
-
-    token = create_access_token({"sub": row["id"]})
-    resp = JSONResponse(Token(access_token=token, token_type="bearer").model_dump())
-    resp.set_cookie("access_token", token, **COOKIE_PARAMS)
-    return resp
-
-
 @app.get("/auth/token")
-async def refresh_token(current_user: CurrentUser) -> dict[str, str]:
+async def refresh_token(request: Request) -> JSONResponse:
+    try:
+        current_user = await get_current_user(request)
+    except HTTPException:
+        # Return empty token instead of 401
+        return JSONResponse({"token": ""})
+
     token = create_access_token({"sub": current_user.id})
     resp = JSONResponse({"token": token})
     resp.set_cookie("access_token", token, **COOKIE_PARAMS)
@@ -426,32 +422,63 @@ async def read_me(current_user: CurrentUser) -> User:
     return current_user
 
 
-# Google OAuth (mock) --------------------------------------------------------
+# Google OAuth (mock?) --------------------------------------------------------
 @app.post("/auth/google")
-async def google_oauth(token: str) -> JSONResponse:
-    # Real implementation should verify `token` with Google. This is stubbed.
-    fake_email = f"google-{token}@example.com"
+async def google_oauth(request: Request):
+    try:
+        data = await request.json()
+        token = data.get("token")
 
-    async with app.state.db_pool.acquire() as conn:
-        row = await conn.fetchrow("SELECT id FROM users WHERE email = $1", fake_email)
-        if not row:
-            user_id = str(uuid.uuid4())
-            await conn.execute(
-                """
-                INSERT INTO users (id, email, name)
-                VALUES ($1, $2, $3)
-                """,
-                user_id,
-                fake_email,
-                "GoogleUser",
-            )
-        else:
-            user_id = row["id"]
+        # Verify Google token
+        id_info = id_token.verify_oauth2_token(
+            token,
+            requests.Request(),
+            "851038444090-ihuvm3cdm6dl74sq1078peptj37r6mlr.apps.googleusercontent.com",  # Your client ID
+        )
 
-    token_jwt = create_access_token({"sub": user_id})
-    resp = JSONResponse(Token(access_token=token_jwt, token_type="bearer").model_dump())
-    resp.set_cookie("access_token", token_jwt, **COOKIE_PARAMS)
-    return resp
+        if id_info["iss"] not in ["accounts.google.com", "https://accounts.google.com"]:
+            raise ValueError("Invalid issuer")
+
+        email = id_info["email"]
+        name = id_info.get("name", email.split("@")[0])
+
+        print(email)
+        print(name)
+
+        async with app.state.db_pool.acquire() as conn:
+            row = await conn.fetchrow("SELECT id FROM users WHERE email = $1", email)
+            if not row:
+                user_id = str(uuid.uuid4())
+                await conn.execute(
+                    """
+                    INSERT INTO users (id, email, name)
+                    VALUES ($1, $2, $3)
+                    """,
+                    user_id,
+                    email,
+                    name,
+                )
+            else:
+                user_id = row["id"]
+
+        user = {"id": user_id, "email": email, "name": name}
+        token_jwt = create_access_token({"sub": user_id})
+        resp = JSONResponse(
+            {
+                "access_token": token_jwt,
+                "token_type": "bearer",
+                "user": user,
+            }
+        )
+        resp.set_cookie("access_token", token_jwt, **COOKIE_PARAMS)
+        return resp
+
+    except ValueError as e:
+        print("OAuth error:", e)
+        return JSONResponse({"detail": str(e)}, status_code=400)
+    except Exception as e:
+        print("Unexpected error during Google OAuth:", e)
+        return JSONResponse({"detail": "Server error"}, status_code=500)
 
 
 # ---------------------------------------------------------------------------
@@ -869,13 +896,18 @@ class Session:
 @app.websocket("/ws/chat")
 async def ws_chat(websocket: WebSocket):
     token = websocket.query_params.get("token")
+    
+    if not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         user_id = payload.get("sub")
     except JWTError:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
-
+    
     await websocket.accept()
     active_sessions: Dict[str, Session] = {}
 
@@ -897,7 +929,7 @@ async def ws_chat(websocket: WebSocket):
             if msg_type == "init":
                 provider = message.get("provider")
                 model = message.get("model")
-                # print(f"Received init for session {session_id} with provider {provider} and model {model}") 
+                # print(f"Received init for session {session_id} with provider {provider} and model {model}")
                 if not session_id or not provider or not model:
                     await websocket.send_text(json.dumps({
                         "sessionId": session_id,
@@ -910,7 +942,7 @@ async def ws_chat(websocket: WebSocket):
                     print(f"Created new session: {session_id}")
 
                 session = sessions[session_id]
-                
+
                 try:
                     await session.initialize_agent(provider, model)
                     active_sessions[session_id] = session
@@ -966,7 +998,7 @@ async def ws_chat(websocket: WebSocket):
                         }))
 
                 await stream()
-                
+
             elif msg_type == "reset":
                 if not session_id or session_id not in active_sessions:
                     await websocket.send_text(json.dumps({
@@ -974,7 +1006,7 @@ async def ws_chat(websocket: WebSocket):
                         "token": "[ERROR] Session not initialized or invalid"
                     }))
                     continue
-                
+
                 reset_index = message.get("resetToIndex")
                 if reset_index is None:
                     await websocket.send_text(json.dumps({
@@ -982,7 +1014,7 @@ async def ws_chat(websocket: WebSocket):
                         "token": "[ERROR] Missing reset index"
                     }))
                     continue
-                
+
                 try:
                     session = active_sessions[session_id]
                     if DB:

@@ -7,10 +7,13 @@ import ChatArea from "./components/ChatArea/ChatArea";
 import InputArea from "./components/InputArea/InputArea";
 import ApiKeysModal from "./components/ApiKeysModal/ApiKeysModal";
 import { useAuth } from './components/AuthContext/AuthContext';
+import { GoogleOAuthProvider, GoogleLogin } from '@react-oauth/google';
 import './App.css';
 
 
 const backendUrl = import.meta.env.VITE_BACKEND_URL || 'http://localhost:4580';
+const clientId = import.meta.env.G_OAUTH_CLIENT_ID || 'http://localhost:4580';
+
 // const backendUrl = 'http://localhost:4580';
 
 const PROVIDER_MODELS = {
@@ -164,7 +167,6 @@ function createDefaultSession() {
 
 
 export default function App() {
-  // const [isInitialized, setIsInitialized] = useState(false);
   const [sessions, setSessions] = useState([]);
   const [activeSessionId, setActiveSessionId] = useState(null);
   const socketRef = useRef(null);
@@ -180,7 +182,7 @@ export default function App() {
     if (!user || sessionsLoaded) {
       setSessionsLoaded(true)
       console.log("no user, sessions loaded")
-      return 
+      return
     };
 
     const initializeApp = async () => {
@@ -191,6 +193,19 @@ export default function App() {
         });
         const sessionsData = await sessionsResponse.json();
 
+        if (sessionsData.length === 0) {
+          // 👋 First‑time user – create an initial session on the server
+          const firstSession = createDefaultSession();
+          const createRes = await fetch(`${backendUrl}/sessions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(firstSession),
+            credentials: 'include'
+          });
+          const saved = await createRes.json();
+          sessionsData.push(saved);
+        }
+        
         const sessionsWithDefaults = sessionsData.map(session => ({
           ...session,
           loadedKeys: new Set(session.loadedKeys || []),
@@ -203,7 +218,7 @@ export default function App() {
         }));
 
         setSessions(sessionsWithDefaults);
-        setActiveSessionId(sessionsWithDefaults[0]?.id || null);
+        setActiveSessionId(sessionsWithDefaults[0]?.id);
 
         // Fetch API keys
         const keysResponse = await fetch(`${backendUrl}/api-keys`, {
@@ -224,9 +239,8 @@ export default function App() {
 
   // Create WebSocket connection once sessions are loaded
   useEffect(() => {
-    if (!sessionsLoaded) {
-      console.log("sessions not loaded")
-
+    if (!sessionsLoaded || !user) {
+      console.log("sessions not loaded or no user, skipping WebSocket");
       return
     };
 
@@ -236,10 +250,21 @@ export default function App() {
         const tokenResponse = await fetch(`${backendUrl}/auth/token`, {
           credentials: 'include'
         });
-        const { token } = await tokenResponse.json();
 
+        // Handle unauthorized state
+        if (tokenResponse.status === 401) {
+          console.log("User not authenticated, skipping WebSocket");
+          return;
+        }
+
+        if (!tokenResponse.ok) {
+          throw new Error(`Token request failed: ${tokenResponse.status}`);
+        }
+
+        const { token } = await tokenResponse.json();
         const wsUrl = `${import.meta.env.VITE_WS_URL || "ws://localhost:4580/ws/chat"}?token=${token}`;
         // const wsUrl = `"ws://localhost:4580/ws/chat"}?token=${token}`;
+
         const socket = new WebSocket(wsUrl);
         socketRef.current = socket;
 
@@ -681,7 +706,6 @@ export default function App() {
     return (
       <div className="app-loading">
         <div className="spinner"></div>
-        {/* {loading ? "Authenticating..." : "Loading chats..."} */}
         Authenticating...
         {isSaving && <div className="saving-indicator">Saving changes...</div>}
       </div>
@@ -691,31 +715,44 @@ export default function App() {
   if (!user) {
     return (
       <div className="login-screen">
-        <h1>Welcome to Atomic Agents</h1>
-        <button onClick={login} className="google-login-btn">
+        <h1>Welcome to Any Chat</h1>
+        {/* <button onClick={login} className="google-login-btn">
           Sign in with Google
-        </button>
+        </button> */}
+        <GoogleOAuthProvider
+          clientId={clientId}>
+          <GoogleLogin
+            onSuccess={cred => {login(cred.credential);}}
+            onError={() => {console.log('Login Failed');}}
+            // useOneTap
+            useOneTap
+            ux_mode="popup"
+          />
+        </GoogleOAuthProvider>
+        {isSaving && <div className="saving-indicator">Saving changes...</div>}
       </div>
     );
   }
 
   if (!sessionsLoaded) {
-      return (
-          <div className="app-loading">
-              <div className="spinner"></div>
-              Loading chats...
-            </div>
-        );
-    }
+    return (
+      <div className="app-loading">
+        <div className="spinner"></div>
+        Loading chats...
+      </div>
+    );
+  }
 
   const activeSession = sessions.find(s => s.id === activeSessionId) || sessions[0];
 
-  if (!activeSession) {
-    return (
-      <div className="app-loading">
-        No active session found. Creating a new one...
-      </div>
-    );
+  if (sessionsLoaded && !activeSession) {
+    createNewSession();           // id will be set on next render
+    return null;     
+    // return (
+    //   <div className="app-loading">
+    //     No active session found. Creating a new one...
+    //   </div>
+    // );
   }
 
   const modelDisplayName = getModelDisplayName(activeSession);
@@ -819,10 +856,3 @@ export default function App() {
   );
 }
 
-// export default function App() {
-//   return (
-//     <div>
-//       Hello World
-//     </div>
-//   );
-// }

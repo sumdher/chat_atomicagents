@@ -27,8 +27,26 @@ export default function AuthProvider({ children }) {
         checkAuth();
     }, []);
 
-    const login = () => {
-        window.location.href = `${backendUrl}/auth/google`;
+    const login = async (googleToken) => {
+    try {
+        const response = await fetch(`${backendUrl}/auth/google`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ token: googleToken  }),
+        credentials: 'include'
+        });
+
+        if (response.ok) {
+        const data = await response.json();
+        setUser(data.user);
+        } else {
+        console.error('Google login failed');
+        }
+    } catch (error) {
+        console.error('Error during Google login', error);
+    }
     };
 
     const logout = async () => {
