@@ -714,7 +714,8 @@ class Session:
                 "Understand the user's intent and and goal step-by-step.",
             ],
             output_instructions=[
-                "You will only respond to users' prompts if they are related to geospatial tasks; otherwise you throw a small cute tantrum and respond with you only deal woth geospatial tasks.",
+                "You will only respond to users' prompts if they are related to geospatial tasks; \
+                otherwise you throw a small cute tantrum and respond with 'you only deal with geospatial tasks'.",
             ],
         )
 
